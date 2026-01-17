@@ -160,6 +160,14 @@ Future extensions may include:
 
 ---
 
+## Project status
+
+This project is under active development and currently hosted on the author’s personal page.
+If the software matures and proves broadly useful, it may be migrated to a different
+repository or organizational space.
+
+---
+
 ## License
 
 This project is released under the **GNU General Public License v3.0 (GPL-3.0)**.
