@@ -11,7 +11,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 
-import it.geoframe.blogpost.subbasins.explorer.ui.Home;
 import it.geoframe.blogpost.subbasins.explorer.ui.MainFrame;
 import it.geoframe.blogpost.subbasins.explorer.ui.SplashScreen;
 
