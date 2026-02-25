@@ -74,16 +74,17 @@ public final class ProjectValidator {
 
 	private static void validateSqlite(Path sqlitePath, List<String> info, List<String> errors, List<String> warnings) {
 		info.add("— Checking SQLite input…");
+		String measurementTable = ExplorerConfig.sqliteMeasurementTable();
 		try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + sqlitePath)) {
 			info.add("✅ SQLite opened successfully.");
 
-			if (!tableExists(c, "measurement")) {
-				errors.add("SQLite: missing table 'measurement'.");
+			if (!tableExists(c, measurementTable)) {
+				errors.add("SQLite: missing table '" + measurementTable + "'.");
 				return;
 			}
-			info.add("✅ SQLite table found: measurement");
+			info.add("✅ SQLite table found: " + measurementTable);
 
-			Set<String> cols = tableColumns(c, "measurement");
+			Set<String> cols = tableColumns(c, measurementTable);
 			requireColumns("SQLite.measurements", cols, Set.of("ts", "basin_id", "value"), info, errors);
 
 			// optional sanity warnings
@@ -97,28 +98,31 @@ public final class ProjectValidator {
 	private static void validateGeoPackageSqliteSide(Path geopkgPath, List<String> info, List<String> errors,
 			List<String> warnings) {
 		info.add("— Checking GeoPackage content (SQLite side)…");
+		String basinTable = ExplorerConfig.geopackageBasinTable();
+		String networkTable = ExplorerConfig.geopackageNetworkTable();
+		String topologyPrefix = ExplorerConfig.geopackageTopologyPrefix();
+		String simulationPrefix = ExplorerConfig.geopackageSimulationPrefix();
 		try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + geopkgPath)) {
 			info.add("✅ GeoPackage opened as SQLite successfully.");
 
 			// Required layers/tables (as per your spec)
-			requireTable(c, "basin", "GeoPackage", info, errors);
-			requireTable(c, "network", "GeoPackage", info, errors);
+			requireTable(c, basinTable, "GeoPackage", info, errors);
+			requireTable(c, networkTable, "GeoPackage", info, errors);
 
-			// "topologi" vs "topology": you mentioned "topologi" earlier; handle both
-			boolean hasTopology = tableExists(c, "topology");
-			if (hasTopology || anyTableStartsWith(c, "topology")) {
-				info.add("✅ GeoPackage table found: " + (hasTopology ? "topology" : "topologi"));
+			boolean hasTopology = tableExists(c, topologyPrefix);
+			if (hasTopology || anyTableStartsWith(c, topologyPrefix)) {
+				info.add("✅ GeoPackage table found: " + topologyPrefix);
 			} else {
-				errors.add("GeoPackage: missing table 'topology' (or 'topologi').");
+				errors.add("GeoPackage: missing table with prefix '" + topologyPrefix + "'.");
 			}
 
 			// at least one table starting with "simulation"
-			boolean hasSimulation = anyTableStartsWith(c, "sim");
+			boolean hasSimulation = anyTableStartsWith(c, simulationPrefix);
 			if (hasSimulation) {
-				List<String> sims = listTablesStartingWith(c, "sim", 10);
+				List<String> sims = listTablesStartingWith(c, simulationPrefix, 10);
 				info.add("✅ GeoPackage simulation tables detected: " + sims + (sims.size() == 10 ? " …" : ""));
 			} else {
-				errors.add("GeoPackage: missing at least one table starting with 'simulation*'.");
+				errors.add("GeoPackage: missing at least one table starting with '" + simulationPrefix + "*'.");
 			}
 
 			// Optional: basic gpkg sanity

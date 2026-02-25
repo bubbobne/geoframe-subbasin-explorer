@@ -1,5 +1,6 @@
 package it.geoframe.blogpost.subbasins.explorer.ui;
 
+import it.geoframe.blogpost.subbasins.explorer.services.ExplorerConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfigStore;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
@@ -250,9 +251,11 @@ public final class SubbasinExplorerPanel extends JPanel {
 		}
 
 		String[] typeNames = dataStore.getTypeNames();
-		String target = Arrays.stream(typeNames).filter(name -> name.equalsIgnoreCase("basin")).findFirst()
+		String basinTable = ExplorerConfig.geopackageBasinTable();
+		String target = Arrays.stream(typeNames).filter(name -> name.equalsIgnoreCase(basinTable)).findFirst()
 				.orElseGet(() -> Arrays.stream(typeNames)
-						.filter(name -> name.toLowerCase(Locale.ROOT).contains("basin")).findFirst().orElse(null));
+						.filter(name -> name.toLowerCase(Locale.ROOT).contains(basinTable.toLowerCase(Locale.ROOT)))
+						.findFirst().orElse(null));
 
 		if (target == null) {
 			return Optional.empty();
@@ -266,9 +269,11 @@ public final class SubbasinExplorerPanel extends JPanel {
 			return null;
 		}
 		String[] typeNames = dataStore.getTypeNames();
-		String target = Arrays.stream(typeNames).filter(name -> name.equalsIgnoreCase("network")).findFirst()
+		String networkTable = ExplorerConfig.geopackageNetworkTable();
+		String target = Arrays.stream(typeNames).filter(name -> name.equalsIgnoreCase(networkTable)).findFirst()
 				.orElseGet(() -> Arrays.stream(typeNames)
-						.filter(name -> name.toLowerCase(Locale.ROOT).contains("network")).findFirst().orElse(null));
+						.filter(name -> name.toLowerCase(Locale.ROOT).contains(networkTable.toLowerCase(Locale.ROOT)))
+						.findFirst().orElse(null));
 		if (target == null) {
 			return null;
 		}
