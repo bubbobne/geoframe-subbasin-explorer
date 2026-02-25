@@ -16,6 +16,7 @@ import org.geotools.api.filter.expression.Expression;
 import org.geotools.api.feature.type.AttributeDescriptor;
 import org.geotools.api.style.FeatureTypeStyle;
 import org.geotools.api.style.Fill;
+import org.geotools.api.style.LineSymbolizer;
 import org.geotools.api.style.Rule;
 import org.geotools.api.style.Stroke;
 import org.geotools.api.style.Style;
@@ -29,6 +30,7 @@ import org.geotools.map.FeatureLayer;
 import org.geotools.map.Layer;
 import org.geotools.map.MapContent;
 import org.geotools.styling.StyleBuilder;
+import org.geotools.swing.JMapFrame;
 import org.geotools.swing.JMapPane;
 import org.geotools.swing.action.InfoAction;
 import org.geotools.swing.action.PanAction;
@@ -39,10 +41,9 @@ import org.geotools.swing.event.MapMouseAdapter;
 import org.geotools.swing.event.MapMouseEvent;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.MultiLineString;
-import org.locationtech.jts.geom.MultiPolygon;
-import org.locationtech.jts.geom.Point;
-import org.locationtech.jts.geom.Polygon;
-
+import org.geotools.swing.tool.PanTool;
+import org.geotools.swing.tool.ScrollWheelTool;
+import java.util.Collections;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -78,11 +79,15 @@ public final class SubbasinExplorerPanel extends JPanel {
 	private static final Color STREAM_GAUGE_COLOR = new Color(235, 137, 52);
 	private static final Color DEFAULT_COLOR = new Color(201, 203, 208);
 	private static final Color LAKE_COLOR = new Color(76, 120, 168);
-	private static final Color NETWORK_COLOR = new Color(33, 89, 141);
+	private static final Color HIGHLIGHT_FILL_COLOR = new Color(255, 240, 120);
+	private static final Color HIGHLIGHT_STROKE_COLOR = new Color(189, 25, 45);
+
 	private final ProjectConfig config;
 	private final JTextArea infoArea = new JTextArea();
 	private final JLabel statusLabel = new JLabel(" ");
 	private final FilterFactory ff = CommonFactoryFinder.getFilterFactory();
+	private FeatureLayer subbasinLayer;
+	private String selectedFeatureId;
 
 	private DataStore dataStore;
 	private SimpleFeatureSource subbasinSource;
@@ -241,14 +246,19 @@ public final class SubbasinExplorerPanel extends JPanel {
 
 			subbasinSource = source.get();
 			MapContent mapContent = new MapContent();
-			Layer subbasinLayer = new FeatureLayer(subbasinSource, buildSubbasinStyle(subbasinSource.getSchema()));
+			Layer subbasinLayer = new FeatureLayer(subbasinSource,
+					buildSubbasinStyle(subbasinSource.getSchema(), null));
+
 			mapContent.addLayer(subbasinLayer);
 
 			networkSource = loadNetworkSource();
+
 			if (networkSource != null) {
 				mapContent.addLayer(new FeatureLayer(networkSource, buildNetworkStyle(networkSource.getSchema())));
 			}
 
+			mapPane.setCursorTool(new PanTool()); // pan con mouse
+			mapPane.addMouseListener(new ScrollWheelTool(mapPane));
 			mapPane.setMapContent(mapContent);
 			mapPane.reset();
 			mapPane.addMouseListener(new MapMouseAdapter() {
@@ -265,6 +275,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 			infoArea.setText("Dettagli errore: " + e.getMessage());
 		}
 	}
+
 	private Optional<SimpleFeatureSource> loadSubbasinSource() throws IOException {
 		if (config == null) {
 			return Optional.empty();
@@ -345,7 +356,8 @@ public final class SubbasinExplorerPanel extends JPanel {
 			return exact.get();
 		}
 		Optional<String> startsWith = Arrays.stream(typeNames)
-				.filter(name -> name.toLowerCase(Locale.ROOT).startsWith(expected.toLowerCase(Locale.ROOT))).findFirst();
+				.filter(name -> name.toLowerCase(Locale.ROOT).startsWith(expected.toLowerCase(Locale.ROOT)))
+				.findFirst();
 		if (startsWith.isPresent()) {
 			return startsWith.get();
 		}
@@ -359,11 +371,17 @@ public final class SubbasinExplorerPanel extends JPanel {
 		return LineString.class.isAssignableFrom(binding) || MultiLineString.class.isAssignableFrom(binding);
 	}
 
-	private Style buildSubbasinStyle(SimpleFeatureType schema) {
+	private Style buildSubbasinStyle(SimpleFeatureType schema, String selectedId) {
 		StyleFactory styleFactory = CommonFactoryFinder.getStyleFactory();
 		StyleBuilder styleBuilder = new StyleBuilder();
 
 		String geomName = schema.getGeometryDescriptor().getLocalName();
+
+		Rule selectedRule = createPolygonRule(styleBuilder, DEFAULT_COLOR, geomName);
+		selectedRule.setFilter(buildSelectedFeatureFilter(selectedId));
+		selectedRule.symbolizers().clear();
+		selectedRule.symbolizers().add(createHighlightedSymbolizer(styleBuilder, geomName));
+
 		Rule lakeRule = createPolygonRule(styleBuilder, LAKE_COLOR, geomName);
 		lakeRule.setFilter(buildLakeFilter(schema));
 
@@ -372,42 +390,41 @@ public final class SubbasinExplorerPanel extends JPanel {
 
 		Rule defaultRule = createPolygonRule(styleBuilder, DEFAULT_COLOR, geomName);
 		defaultRule.setElseFilter(true);
+		FeatureTypeStyle fts = styleFactory
+				.createFeatureTypeStyle(new Rule[] { lakeRule, streamGaugeRule, defaultRule, selectedRule });
 
-		FeatureTypeStyle fts = styleFactory.createFeatureTypeStyle(new Rule[] { lakeRule, streamGaugeRule, defaultRule });
 		Style style = styleFactory.createStyle();
 		style.featureTypeStyles().add(fts);
 		return style;
 	}
 
+	private Symbolizer createHighlightedSymbolizer(StyleBuilder styleBuilder, String geomName) {
+		Stroke thickStroke = styleBuilder.createStroke(HIGHLIGHT_STROKE_COLOR, 4.2f);
+		Fill fill = styleBuilder.createFill(HIGHLIGHT_FILL_COLOR, 2f);
+		return styleBuilder.createPolygonSymbolizer(thickStroke, fill, geomName);
+	}
+
+	private Filter buildSelectedFeatureFilter(String selectedId) {
+		if (selectedId == null || selectedId.isBlank()) {
+			return Filter.EXCLUDE;
+		}
+		return ff.id(Collections.singleton(ff.featureId(selectedId)));
+	}
+
 	private Rule createPolygonRule(StyleBuilder sb, Color fillColor, String geomName) {
-		Stroke stroke = sb.createStroke(new Color(75, 75, 75), 0.9f);
-		Fill fill = sb.createFill(fillColor, 0.85f);
+		Stroke stroke = sb.createStroke(new Color(75, 75, 75), 1.0f);
+		Fill fill = sb.createFill(fillColor, 1.0f);
 		return sb.createRule(sb.createPolygonSymbolizer(stroke, fill, geomName));
 	}
 
 	private Style buildNetworkStyle(SimpleFeatureType schema) {
-		StyleBuilder styleBuilder = new StyleBuilder();
-		String geomName = schema.getGeometryDescriptor().getLocalName();
-		Rule rule;
-		Class<?> binding = schema.getGeometryDescriptor().getType().getBinding();
-		if (Point.class.isAssignableFrom(binding)) {
-			rule = styleBuilder.createRule(
-					styleBuilder.createPointSymbolizer(styleBuilder.createGraphic(null,
-							styleBuilder.createMark(StyleBuilder.MARK_CIRCLE, NETWORK_COLOR, Color.WHITE, 0.8), null,
-							1.0, 9.0, 0.0), geomName));
-		} else if (Polygon.class.isAssignableFrom(binding) || MultiPolygon.class.isAssignableFrom(binding)) {
-			Stroke stroke = styleBuilder.createStroke(NETWORK_COLOR, 1.8f);
-			Fill transparentFill = styleBuilder.createFill(new Color(0, 0, 0, 0), 0.0);
-			rule = styleBuilder.createRule(styleBuilder.createPolygonSymbolizer(stroke, transparentFill, geomName));
-		} else {
-			Stroke stroke = styleBuilder.createStroke(NETWORK_COLOR, 1.8f);
-			rule = styleBuilder.createRule(styleBuilder.createLineSymbolizer(stroke, geomName));
-		}
+		StyleBuilder sb = new StyleBuilder();
 
-		Style style = styleBuilder.createStyle();
+		Stroke stroke = sb.createStroke(LAKE_COLOR, 0.7f); // colore + spessore
+		LineSymbolizer lineSym = sb.createLineSymbolizer(stroke);
 
-		
-		style.featureTypeStyles().add(styleBuilder.createFeatureTypeStyle(geomName, rule));
+		Style style = sb.createStyle(lineSym);
+
 		return style;
 	}
 
@@ -424,12 +441,10 @@ public final class SubbasinExplorerPanel extends JPanel {
 		String field = findAttributeIgnoreCase(schema, "islake", "is_lake", "isLake");
 		if (field == null) {
 			return Filter.EXCLUDE;
-		}	
+		}
 		Expression prop = ff.property(field);
-		Expression asString = ff.function(
-			    "strToUpperCase",
-			    ff.function("strTrim", prop)
-			);		Filter isTrue = ff.equal(prop, ff.literal(true), false);
+		Expression asString = ff.function("strToUpperCase", ff.function("strTrim", prop));
+		Filter isTrue = ff.equal(prop, ff.literal(true), false);
 		Filter isOneNumber = ff.equal(prop, ff.literal(1), false);
 		Filter isOneDouble = ff.equal(prop, ff.literal(1.0d), false);
 		Filter greaterThanZero = ff.greater(prop, ff.literal(0));
@@ -438,10 +453,8 @@ public final class SubbasinExplorerPanel extends JPanel {
 		Filter isYes = ff.equal(asString, ff.literal("YES"), false);
 		Filter isT = ff.equal(asString, ff.literal("T"), false);
 		Filter isOneString = ff.equal(prop, ff.literal("1"), false);
-		return ff.or(
-				ff.or(ff.or(isTrue, ff.or(isOneNumber, isOneDouble)), ff.or(greaterThanZero, isOneString)),
+		return ff.or(ff.or(ff.or(isTrue, ff.or(isOneNumber, isOneDouble)), ff.or(greaterThanZero, isOneString)),
 				ff.or(ff.or(isTrueString, isY), ff.or(isYes, isT)));
-
 
 	}
 
@@ -509,6 +522,9 @@ public final class SubbasinExplorerPanel extends JPanel {
 	}
 
 	private void updateInfo(SimpleFeature feature) {
+		selectedFeatureId = feature.getID();
+		refreshSubbasinStyle();
+
 		StringBuilder sb = new StringBuilder();
 		sb.append("ID: ").append(feature.getID()).append("\n\n");
 		for (int i = 1; i < feature.getAttributeCount(); i++) {
@@ -519,4 +535,13 @@ public final class SubbasinExplorerPanel extends JPanel {
 		infoArea.setText(sb.toString());
 		infoArea.setCaretPosition(0);
 	}
+
+	private void refreshSubbasinStyle() {
+		if (subbasinLayer == null || subbasinSource == null) {
+			return;
+		}
+		subbasinLayer.setStyle(buildSubbasinStyle(subbasinSource.getSchema(), selectedFeatureId));
+		mapPane.repaint();
+	}
+
 }
