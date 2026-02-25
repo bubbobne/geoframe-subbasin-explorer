@@ -148,6 +148,32 @@ Future extensions may include:
 
 ---
 
+
+## Configuration (table/layer names)
+
+Table and layer names are now configurable through `explorer.properties`.
+
+Lookup order at runtime:
+1. JVM option `-Dgeoframe.explorer.config=/path/to/explorer.properties`
+2. User file `~/.geoframe-subbasins-explorer/explorer.properties`
+3. Bundled classpath default `src/main/resources/explorer.properties`
+
+Default keys:
+- `tables.sqlite.measurement`
+- `tables.geopackage.basin`
+- `tables.geopackage.network`
+- `tables.geopackage.topology.prefix`
+- `tables.geopackage.simulation.prefix`
+
+---
+
+## UI updates
+
+- Improved subbasin style rules to better match `islake` attributes with different naming/value conventions (`islake`, `is_lake`, `isLake`, boolean/1/string values).
+- Improved network layer loading by preferring line geometries when multiple matching layer names exist.
+- Added a new button under **Subbasin info**: **Apri vista grafici**. It opens a placeholder multi-panel dialog with dropdown menus for future chart controls.
+
+---
 ## Roadmap
 
 - [x] GeoPackage loader and attribute mapping
