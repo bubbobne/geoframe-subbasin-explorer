@@ -39,6 +39,9 @@ import org.geotools.swing.event.MapMouseAdapter;
 import org.geotools.swing.event.MapMouseEvent;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.MultiLineString;
+import org.locationtech.jts.geom.MultiPolygon;
+import org.locationtech.jts.geom.Point;
+import org.locationtech.jts.geom.Polygon;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
@@ -385,8 +388,22 @@ public final class SubbasinExplorerPanel extends JPanel {
 	private Style buildNetworkStyle(SimpleFeatureType schema) {
 		StyleBuilder styleBuilder = new StyleBuilder();
 		String geomName = schema.getGeometryDescriptor().getLocalName();
-		Stroke stroke = styleBuilder.createStroke(NETWORK_COLOR, 1.6f);
-		Rule rule = styleBuilder.createRule(styleBuilder.createLineSymbolizer(stroke, geomName));
+		Rule rule;
+		Class<?> binding = schema.getGeometryDescriptor().getType().getBinding();
+		if (Point.class.isAssignableFrom(binding)) {
+			rule = styleBuilder.createRule(
+					styleBuilder.createPointSymbolizer(styleBuilder.createGraphic(null,
+							styleBuilder.createMark(StyleBuilder.MARK_CIRCLE, NETWORK_COLOR, Color.WHITE, 0.8), null,
+							1.0, 9.0, 0.0), geomName));
+		} else if (Polygon.class.isAssignableFrom(binding) || MultiPolygon.class.isAssignableFrom(binding)) {
+			Stroke stroke = styleBuilder.createStroke(NETWORK_COLOR, 1.8f);
+			Fill transparentFill = styleBuilder.createFill(new Color(0, 0, 0, 0), 0.0);
+			rule = styleBuilder.createRule(styleBuilder.createPolygonSymbolizer(stroke, transparentFill, geomName));
+		} else {
+			Stroke stroke = styleBuilder.createStroke(NETWORK_COLOR, 1.8f);
+			rule = styleBuilder.createRule(styleBuilder.createLineSymbolizer(stroke, geomName));
+		}
+
 		Style style = styleBuilder.createStyle();
 
 		
@@ -407,17 +424,25 @@ public final class SubbasinExplorerPanel extends JPanel {
 		String field = findAttributeIgnoreCase(schema, "islake", "is_lake", "isLake");
 		if (field == null) {
 			return Filter.EXCLUDE;
-		}
+		}	
 		Expression prop = ff.property(field);
-		Filter isTrue = ff.equal(prop, ff.literal(true), false);
+		Expression asString = ff.function(
+			    "strToUpperCase",
+			    ff.function("strTrim", prop)
+			);		Filter isTrue = ff.equal(prop, ff.literal(true), false);
 		Filter isOneNumber = ff.equal(prop, ff.literal(1), false);
+		Filter isOneDouble = ff.equal(prop, ff.literal(1.0d), false);
+		Filter greaterThanZero = ff.greater(prop, ff.literal(0));
+		Filter isTrueString = ff.equal(asString, ff.literal("TRUE"), false);
+		Filter isY = ff.equal(asString, ff.literal("Y"), false);
+		Filter isYes = ff.equal(asString, ff.literal("YES"), false);
+		Filter isT = ff.equal(asString, ff.literal("T"), false);
 		Filter isOneString = ff.equal(prop, ff.literal("1"), false);
-		Filter isTrueString = ff.equal(prop, ff.literal("true"), false);
-		Filter isTrueUpper = ff.equal(prop, ff.literal("TRUE"), false);
-		Filter isY = ff.equal(prop, ff.literal("Y"), false);
-		Filter isYes = ff.equal(prop, ff.literal("yes"), false);
-		return ff.or(ff.or(ff.or(isTrue, isOneNumber), ff.or(isOneString, isTrueString)),
-				ff.or(ff.or(isTrueUpper, isY), isYes));
+		return ff.or(
+				ff.or(ff.or(isTrue, ff.or(isOneNumber, isOneDouble)), ff.or(greaterThanZero, isOneString)),
+				ff.or(ff.or(isTrueString, isY), ff.or(isYes, isT)));
+
+
 	}
 
 	private String resolveStreamGaugeField(SimpleFeatureType schema) {
