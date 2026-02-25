@@ -261,7 +261,6 @@ public final class SubbasinExplorerPanel extends JPanel {
 			infoArea.setText("Dettagli errore: " + e.getMessage());
 		}
 	}
-
 	private Optional<SimpleFeatureSource> loadSubbasinSource() throws IOException {
 		if (config == null) {
 			return Optional.empty();
