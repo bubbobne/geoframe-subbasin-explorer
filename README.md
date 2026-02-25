@@ -176,13 +176,14 @@ Default keys:
 ---
 ## Roadmap
 
-- [ ] GeoPackage loader and attribute mapping
-- [ ] Interactive basin view (pan / zoom / selection)
+- [x] GeoPackage loader and attribute mapping
+- [x] Interactive basin view (pan / zoom / selection)
 - [ ] Time series plotting (Qsim vs Qobs)
 - [ ] States visualization (bar charts, snapshots)
 - [ ] Water balance summaries
 - [ ] Export plots and tables
 - [ ] Performance improvements and caching
+- [ ] Extend to legacy output folder  structure
 
 ---
 
