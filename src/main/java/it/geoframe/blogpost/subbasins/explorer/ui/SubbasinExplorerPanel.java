@@ -20,6 +20,7 @@ import org.geotools.api.style.Rule;
 import org.geotools.api.style.Stroke;
 import org.geotools.api.style.Style;
 import org.geotools.api.style.StyleFactory;
+import org.geotools.api.style.Symbolizer;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureIterator;
 import org.geotools.factory.CommonFactoryFinder;
@@ -387,7 +388,9 @@ public final class SubbasinExplorerPanel extends JPanel {
 		Stroke stroke = styleBuilder.createStroke(NETWORK_COLOR, 1.6f);
 		Rule rule = styleBuilder.createRule(styleBuilder.createLineSymbolizer(stroke, geomName));
 		Style style = styleBuilder.createStyle();
-		style.featureTypeStyles().add(styleBuilder.createFeatureTypeStyle(rule));
+
+		
+		style.featureTypeStyles().add(styleBuilder.createFeatureTypeStyle(geomName, rule));
 		return style;
 	}
 
