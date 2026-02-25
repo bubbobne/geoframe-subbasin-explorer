@@ -17,6 +17,7 @@ import org.geotools.api.feature.type.AttributeDescriptor;
 import org.geotools.api.style.FeatureTypeStyle;
 import org.geotools.api.style.Fill;
 import org.geotools.api.style.LineSymbolizer;
+import javax.swing.Action;
 import org.geotools.api.style.Rule;
 import org.geotools.api.style.Stroke;
 import org.geotools.api.style.Style;
@@ -117,6 +118,15 @@ public final class SubbasinExplorerPanel extends JPanel {
 		tb.add(new PanAction(mapPane));
 		tb.add(new ResetAction(mapPane));
 		tb.add(new InfoAction(mapPane));
+		Action infoAction = new InfoAction(mapPane);
+		tb.add(new AbstractAction("Info") {
+			@Override
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				infoAction.actionPerformed(e);
+				clearSelection();
+			}
+		});
+
 		tb.add(new AbstractAction("Home") {
 			@Override
 			public void actionPerformed(java.awt.event.ActionEvent e) {
@@ -246,7 +256,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 
 			subbasinSource = source.get();
 			MapContent mapContent = new MapContent();
-			Layer subbasinLayer = new FeatureLayer(subbasinSource,
+			subbasinLayer = new FeatureLayer(subbasinSource,
 					buildSubbasinStyle(subbasinSource.getSchema(), null));
 
 			mapContent.addLayer(subbasinLayer);
@@ -377,7 +387,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 
 		String geomName = schema.getGeometryDescriptor().getLocalName();
 
-		Rule selectedRule = createPolygonRule(styleBuilder, DEFAULT_COLOR, geomName);
+		Rule selectedRule = createPolygonRule(styleBuilder, HIGHLIGHT_FILL_COLOR, geomName);
 		selectedRule.setFilter(buildSelectedFeatureFilter(selectedId));
 		selectedRule.symbolizers().clear();
 		selectedRule.symbolizers().add(createHighlightedSymbolizer(styleBuilder, geomName));
@@ -391,7 +401,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 		Rule defaultRule = createPolygonRule(styleBuilder, DEFAULT_COLOR, geomName);
 		defaultRule.setElseFilter(true);
 		FeatureTypeStyle fts = styleFactory
-				.createFeatureTypeStyle(new Rule[] { lakeRule, streamGaugeRule, defaultRule, selectedRule });
+				.createFeatureTypeStyle(new Rule[] { selectedRule,lakeRule, streamGaugeRule, defaultRule });
 
 		Style style = styleFactory.createStyle();
 		style.featureTypeStyles().add(fts);
@@ -400,7 +410,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 
 	private Symbolizer createHighlightedSymbolizer(StyleBuilder styleBuilder, String geomName) {
 		Stroke thickStroke = styleBuilder.createStroke(HIGHLIGHT_STROKE_COLOR, 4.2f);
-		Fill fill = styleBuilder.createFill(HIGHLIGHT_FILL_COLOR, 2f);
+		Fill fill = styleBuilder.createFill(HIGHLIGHT_FILL_COLOR, 0.8f);
 		return styleBuilder.createPolygonSymbolizer(thickStroke, fill, geomName);
 	}
 
@@ -484,6 +494,14 @@ public final class SubbasinExplorerPanel extends JPanel {
 		return null;
 	}
 
+	
+	private void clearSelection() {
+		selectedFeatureId = null;
+		refreshSubbasinStyle();
+	}
+
+
+	
 	private void handleMapClick(MapMouseEvent ev) {
 		if (subbasinSource == null) {
 			return;
@@ -514,6 +532,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 					updateInfo(iterator.next());
 				} else {
 					infoArea.setText("Nessun sottobacino trovato in questo punto.");
+					clearSelection();
 				}
 			}
 		} catch (IOException e) {
