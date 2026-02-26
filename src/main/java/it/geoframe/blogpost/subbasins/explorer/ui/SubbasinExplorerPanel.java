@@ -228,7 +228,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 			return new String[0];
 		}
 		try {
-			List<String> simulationTables = ProjectValidator.listSimulationDischargeTables(config.geopackagePath(),
+			List<String> simulationTables = ProjectValidator.listSimulationTables(config.geopackagePath(),
 					ExplorerConfig.geopackageSimulationPrefix(), 500);
 			return simulationTables.toArray(String[]::new);
 		} catch (SQLException e) {
