@@ -6,7 +6,12 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+
+import java.awt.Color;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -23,6 +28,8 @@ import javax.swing.WindowConstants;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
+import org.jfree.chart.plot.XYPlot;
+import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
 import org.jfree.data.time.TimeSeries;
 import org.jfree.data.time.TimeSeriesCollection;
 
@@ -43,6 +50,8 @@ public final class TimeseriesWindow {
 	private final JTextArea statusArea;
 	private final TimeSeriesCollection dataset;
 	private String activeType;
+	private String baseSeriesKey;
+	private final XYLineAndShapeRenderer renderer;
 
 	public TimeseriesWindow(Component parent, ProjectConfig config, TimeseriesLoader loader,
 			Supplier<List<String>> tableSupplier, Supplier<List<String>> basinSupplier,
@@ -59,6 +68,9 @@ public final class TimeseriesWindow {
 		dialog.setLayout(new BorderLayout(8, 8));
 		dataset = new TimeSeriesCollection();
 		JFreeChart chart = ChartFactory.createTimeSeriesChart("Timeseries", "Tempo", "Valore", dataset, true, true, false);
+		XYPlot plot = chart.getXYPlot();
+		renderer = new XYLineAndShapeRenderer(true, false);
+		plot.setRenderer(renderer);
 		JPanel controlsPanel = new JPanel(new GridBagLayout());
 		GridBagConstraints gbc = new GridBagConstraints();
 		gbc.insets = new Insets(4, 4, 4, 4);
@@ -83,9 +95,17 @@ public final class TimeseriesWindow {
 			controlsPanel.add(streamGaugeCombo, gbc);
 			gbc.gridy++;
 		}
-		JButton addButton = new JButton("Carica");
-		addButton.addActionListener(e -> addSelectedSeries());
-		controlsPanel.add(addButton, gbc);
+		JButton addSimulationButton = new JButton("Carica simulazione");
+		addSimulationButton.addActionListener(e -> addSelectedSeriesFromMainCombo());
+		controlsPanel.add(addSimulationButton, gbc);
+		gbc.gridy++;
+		JButton addGaugeButton = new JButton("Carica stream gauge");
+		addGaugeButton.addActionListener(e -> addSelectedSeriesFromGaugeCombo());
+		controlsPanel.add(addGaugeButton, gbc);
+		gbc.gridy++;
+		JButton clearExtraLinesButton = new JButton("Tieni solo portata base");
+		clearExtraLinesButton.addActionListener(e -> keepOnlyBaseSeries());
+		controlsPanel.add(clearExtraLinesButton, gbc);
 		statusArea = new JTextArea();
 		statusArea.setEditable(false);
 		statusArea.setLineWrap(true);
@@ -101,6 +121,7 @@ public final class TimeseriesWindow {
 	public void showForSelection(String subbasinId, String firstTable, String type) {
 		this.activeType = type == null ? "discharge" : type;
 		dataset.removeAllSeries();
+		baseSeriesKey = null;
 		reloadCombos();
 		if (subbasinId != null) {
 			basinCombo.setSelectedItem(subbasinId);
@@ -115,7 +136,7 @@ public final class TimeseriesWindow {
 
 	private void reloadCombos() {
 		tableCombo.removeAllItems();
-		for (String table : tableSupplier.get()) {
+		for (String table : filterTablesByActiveType(tableSupplier.get())) {
 			tableCombo.addItem(table);
 		}
 		basinCombo.removeAllItems();
@@ -130,30 +151,84 @@ public final class TimeseriesWindow {
 		}
 	}
 
-	private void addSelectedSeries() {
+	private List<String> filterTablesByActiveType(List<String> sourceTables) {
+		if (sourceTables == null || sourceTables.isEmpty()) {
+			return List.of();
+		}
+		if (activeType == null || activeType.isBlank()) {
+			return sourceTables;
+		}
+		String normalized = activeType.toLowerCase(Locale.ROOT);
+		List<String> filtered = new ArrayList<>();
+		for (String table : sourceTables) {
+			if (table != null && table.toLowerCase(Locale.ROOT).contains(normalized)) {
+				filtered.add(table);
+			}
+		}
+		return filtered.isEmpty() ? sourceTables : filtered;
+	}
+
+	private void addSelectedSeriesFromMainCombo() {
 		String table = (String) tableCombo.getSelectedItem();
+		addSeries(table, false);
+	}
+
+	private void addSelectedSeriesFromGaugeCombo() {
+		if (config.mode() != ProjectMode.GEOPACKAGE || !streamGaugeSelectionSupplier.getAsBoolean()) {
+			statusArea.setText("Stream gauge non disponibile per la selezione corrente.");
+			return;
+		}
+		String table = (String) streamGaugeCombo.getSelectedItem();
+		addSeries(table, true);
+	}
+
+	private void addSelectedSeries() {
+		addSelectedSeriesFromMainCombo();
+	}
+
+	private void addSeries(String table, boolean isGaugeSeries) {
 		String basinId = (String) basinCombo.getSelectedItem();
 		if (table == null || basinId == null) {
 			statusArea.setText("Seleziona tabella e sottobacino.");
 			return;
 		}
-		TimeSeries series = new TimeSeries(table + " | basin " + basinId);
+		String labelPrefix = isGaugeSeries ? "stream gauge" : table;
+		TimeSeries series = new TimeSeries(labelPrefix + " | basin " + basinId);
 		int count = loader.fillSeriesFromAnyInput(config, table, basinId, series);
-		if (count > 0) {
-			dataset.addSeries(series);
-			statusArea.setText("Aggiunta serie: " + table + "\nBasin ID: " + basinId + "\nPunti: " + count);
+		if (count <= 0) {
+			statusArea.setText("Nessun dato trovato per tabella " + table + " e basin " + basinId + ".");
 			return;
 		}
-		if (config.mode() == ProjectMode.GEOPACKAGE && streamGaugeSelectionSupplier.getAsBoolean()) {
-			String sgTable = (String) streamGaugeCombo.getSelectedItem();
-			if (sgTable != null) {
-				TimeSeries sgSeries = new TimeSeries("stream gauge | " + sgTable + " | basin " + basinId);
-				int sgCount = loader.fillSeriesFromAnyInput(config, sgTable, basinId, sgSeries);
-				if (sgCount > 0) {
-					dataset.addSeries(sgSeries);
-					statusArea.append("\nAggiunta serie stream gauge: " + sgTable + " (" + sgCount + " punti)");
-				}
+		dataset.addSeries(series);
+		applySeriesStyles();
+		statusArea.setText("Aggiunta serie: " + table + "\nBasin ID: " + basinId + "\nPunti: " + count);
+	}
+
+	private void applySeriesStyles() {
+		if (dataset.getSeriesCount() == 0) {
+			return;
+		}
+		if (baseSeriesKey == null) {
+			baseSeriesKey = dataset.getSeries(0).getKey().toString();
+		}
+		for (int i = 0; i < dataset.getSeriesCount(); i++) {
+			String key = dataset.getSeries(i).getKey().toString();
+			renderer.setSeriesPaint(i, key.equals(baseSeriesKey) ? Color.BLUE : Color.DARK_GRAY);
+		}
+	}
+
+	private void keepOnlyBaseSeries() {
+		if (baseSeriesKey == null || dataset.getSeriesCount() <= 1) {
+			statusArea.setText("Non ci sono linee aggiuntive da rimuovere.");
+			return;
+		}
+		for (int i = dataset.getSeriesCount() - 1; i >= 0; i--) {
+			String key = dataset.getSeries(i).getKey().toString();
+			if (!key.equals(baseSeriesKey)) {
+				dataset.removeSeries(i);
 			}
 		}
+		applySeriesStyles();
+		statusArea.setText("Rimosse le linee aggiuntive. Tenuta solo la portata base.");
 	}
 }
