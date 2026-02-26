@@ -10,10 +10,16 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.function.BooleanSupplier;
@@ -54,6 +60,11 @@ import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 public final class TimeseriesWindow {
 	private static final String STREAM_GAUGE_PREFIX = "stream gauge";
 	private static final String DATE_FMT = "yyyy-MM-dd";
+
+	private record StatePoint(long timestamp, double sweDelta, double aetDelta, double canopyDelta, double rootzoneDelta,
+			double runoffDelta, double groundDelta) {
+	}
+
 	private final ProjectConfig config;
 	private final TimeseriesLoader loader;
 	private final Supplier<List<String>> tableSupplier;
@@ -434,6 +445,86 @@ public final class TimeseriesWindow {
 		appendLog("Caricate serie state impilate da " + table + " | basin " + basinId + " | aggregazione: "
 				+ stateAggregationCombo.getSelectedItem() + " | punti: " + aggregated.size());
 	}
+
+	private String cfg(String key, String defaultValue) {
+		return ExplorerConfig.chartOption(key, defaultValue);
+	}
+
+	private Color cfgColor(String key, String defaultHex) {
+		String raw = cfg(key, defaultHex);
+		try {
+			return Color.decode(raw.startsWith("#") ? raw : ("#" + raw));
+		} catch (NumberFormatException ex) {
+			return Color.decode(defaultHex);
+		}
+	}
+
+
+	private void addLineSeries(List<TimeseriesLoader.TimeValueRow> rows, String key, String label, Color color) {
+		TimeSeries series = new TimeSeries(label);
+		for (TimeseriesLoader.TimeValueRow row : rows) {
+			double v = value(row, key);
+			if (Double.isFinite(v)) {
+				series.addOrUpdate(new Millisecond(new Date(row.timestamp())), v);
+			}
+			out.add(new StatePoint(row.timestamp(), sweDelta, value(row, rootzoneAetCol) + value(row, canopyAetCol),
+					value(row, canopyFinalCol) - value(row, canopyInitialCol),
+					value(row, rootzoneFinalCol) - value(row, rootzoneInitialCol),
+					value(row, runoffFinalCol) - value(row, runoffInitialCol),
+					value(row, groundFinalCol) - value(row, groundInitialCol)));
+		}
+		dataset.addSeries(series);
+		renderer.setSeriesPaint(dataset.getSeriesCount() - 1, color);
+	}
+
+		return out;
+	}
+
+	private List<StatePoint> aggregateStatePoints(List<StatePoint> points, String aggregation) {
+		if (points.isEmpty()) {
+			return List.of();
+		}
+		Map<Long, StatePoint> aggregated = new LinkedHashMap<>();
+		for (StatePoint p : points) {
+			long keyTs = bucketStart(p.timestamp(), aggregation);
+			StatePoint current = aggregated.get(keyTs);
+			if (current == null) {
+				aggregated.put(keyTs, new StatePoint(keyTs, p.sweDelta(), p.aetDelta(), p.canopyDelta(), p.rootzoneDelta(),
+						p.runoffDelta(), p.groundDelta()));
+			} else {
+				aggregated.put(keyTs,
+						new StatePoint(keyTs, current.sweDelta() + p.sweDelta(), current.aetDelta() + p.aetDelta(),
+								current.canopyDelta() + p.canopyDelta(), current.rootzoneDelta() + p.rootzoneDelta(),
+								current.runoffDelta() + p.runoffDelta(), current.groundDelta() + p.groundDelta()));
+			}
+		}
+		return new ArrayList<>(aggregated.values());
+	}
+
+	private long bucketStart(long ts, String aggregation) {
+		Instant instant = Instant.ofEpochMilli(ts);
+		if ("1h".equalsIgnoreCase(aggregation)) {
+			return (ts / 3_600_000L) * 3_600_000L;
+		}
+		if ("12h".equalsIgnoreCase(aggregation)) {
+			return (ts / 43_200_000L) * 43_200_000L;
+		}
+		if ("24h".equalsIgnoreCase(aggregation)) {
+			return (ts / 86_400_000L) * 86_400_000L;
+		}
+		LocalDate date = instant.atZone(ZoneOffset.UTC).toLocalDate();
+		if ("settimana".equalsIgnoreCase(aggregation)) {
+			LocalDate monday = date.with(java.time.DayOfWeek.MONDAY);
+			return monday.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
+		}
+		if ("anno".equalsIgnoreCase(aggregation)) {
+			LocalDate firstYearDay = date.with(TemporalAdjusters.firstDayOfYear());
+			return firstYearDay.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
+		}
+		LocalDate firstMonthDay = date.with(TemporalAdjusters.firstDayOfMonth());
+		return firstMonthDay.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
+	}
+
 
 	private String cfg(String key, String defaultValue) {
 		return ExplorerConfig.chartOption(key, defaultValue);
