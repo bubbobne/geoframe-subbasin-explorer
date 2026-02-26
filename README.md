@@ -175,6 +175,26 @@ Default keys:
 
 ### Chart parametrization
 
+
+### Chart console commands
+
+In the lower black console area of the chart window, you can type commands.
+
+Supported commands:
+- `help` → show command help
+- `list` → list current plotted series with indexes
+- `remove <n>` → remove a plotted series by index (`0` is the base series and cannot be removed)
+- `zoom <from> <to>` → zoom x-axis to a date range (`yyyy-MM-dd` or `dd/MM/yyyy`)
+- `resetzoom` → restore automatic chart bounds
+- `agg <option>` → change state aggregation on-the-fly (`1h`, `12h`, `24h`, `settimana`, `mese`, `anno`) when in `state` mode
+- `clear` → clear console output
+
+Examples:
+- `zoom 01/02/2021 03/04/2021`
+- `remove 1`
+- `agg mese`
+
+
 You can customize state/fluxes charts directly from `explorer.properties` without changing code:
 
 - **Columns mapping**: remap expected database columns for state and fluxes (for example when schema names differ across projects).

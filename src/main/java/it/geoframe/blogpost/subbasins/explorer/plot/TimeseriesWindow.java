@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,11 +61,6 @@ import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 public final class TimeseriesWindow {
 	private static final String STREAM_GAUGE_PREFIX = "stream gauge";
 	private static final String DATE_FMT = "yyyy-MM-dd";
-
-	private record StatePoint(long timestamp, double sweDelta, double aetDelta, double canopyDelta, double rootzoneDelta,
-			double runoffDelta, double groundDelta) {
-	}
-
 	private final ProjectConfig config;
 	private final TimeseriesLoader loader;
 	private final Supplier<List<String>> tableSupplier;
@@ -85,6 +81,8 @@ public final class TimeseriesWindow {
 	private final XYPlot plot;
 	private final CardLayout modeControlsLayout;
 	private final JPanel modeControlsContainer;
+	private final ChartPanel chartPanel;
+	private final JTextField commandField;
 
 	public TimeseriesWindow(Component parent, ProjectConfig config, TimeseriesLoader loader,
 			Supplier<List<String>> tableSupplier, Supplier<List<String>> basinSupplier,
@@ -169,10 +167,21 @@ public final class TimeseriesWindow {
 		JScrollPane consoleScroll = new JScrollPane(statusArea);
 		consoleScroll.setPreferredSize(new Dimension(1000, 220));
 
-		ChartPanel chartPanel = new ChartPanel(chart);
+		chartPanel = new ChartPanel(chart);
 		chartPanel.setMouseWheelEnabled(true);
 		chartPanel.setMouseZoomable(true, false);
-		JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chartPanel, consoleScroll);
+		JPanel consolePanel = new JPanel(new BorderLayout(4, 4));
+		consolePanel.add(consoleScroll, BorderLayout.CENTER);
+		commandField = new JTextField();
+		commandField.addActionListener(e -> executeConsoleCommand(commandField.getText()));
+		JButton runCommandButton = new JButton("Esegui");
+		runCommandButton.addActionListener(e -> executeConsoleCommand(commandField.getText()));
+		JPanel cmdRow = new JPanel(new BorderLayout(4, 4));
+		cmdRow.add(new JLabel(">"), BorderLayout.WEST);
+		cmdRow.add(commandField, BorderLayout.CENTER);
+		cmdRow.add(runCommandButton, BorderLayout.EAST);
+		consolePanel.add(cmdRow, BorderLayout.SOUTH);
+		JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chartPanel, consolePanel);
 		rightSplit.setResizeWeight(0.68);
 		rightSplit.setContinuousLayout(true);
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, rightSplit);
@@ -200,6 +209,7 @@ public final class TimeseriesWindow {
 		dialog.setTitle("Vista " + activeType);
 		dialog.setVisible(true);
 		appendLog("Aperta vista " + activeType + " per sottobacino " + String.valueOf(subbasinId) + ".");
+		appendLog("Console pronta. Digita help per i comandi.");
 		addSelectedSeriesFromSimulationCombo();
 	}
 
@@ -938,6 +948,124 @@ public final class TimeseriesWindow {
 		}
 		return new long[] { min, max };
 	}
+
+
+	private void executeConsoleCommand(String commandLine) {
+		String raw = commandLine == null ? "" : commandLine.trim();
+		if (raw.isBlank()) {
+			return;
+		}
+		commandField.setText("");
+		appendLog("> " + raw);
+		String[] parts = raw.split("\\s+");
+		String cmd = parts[0].toLowerCase(Locale.ROOT);
+		try {
+			switch (cmd) {
+			case "help":
+				appendLog("Comandi: help | list | remove <n> | zoom <dal> <al> | resetzoom | agg <opzione> | clear");
+				appendLog("Date supportate: yyyy-MM-dd oppure dd/MM/yyyy");
+				break;
+			case "list":
+				listSeriesInConsole();
+				break;
+			case "remove":
+				if (parts.length < 2) {
+					appendLog("Uso: remove <n>");
+					break;
+				}
+				removeAddedSeries(Integer.parseInt(parts[1]));
+				break;
+			case "zoom":
+				if (parts.length < 3) {
+					appendLog("Uso: zoom <dal> <al>");
+					break;
+				}
+				Long from = parseFlexibleDate(parts[1]);
+				Long to = parseFlexibleDate(parts[2]);
+				if (from == null || to == null || from > to) {
+					appendLog("Date non valide. Usa yyyy-MM-dd o dd/MM/yyyy.");
+					break;
+				}
+				plot.getDomainAxis().setRange(from, to);
+				appendLog("Zoom applicato.");
+				break;
+			case "resetzoom":
+				chartPanel.restoreAutoBounds();
+				appendLog("Zoom resettato.");
+				break;
+			case "agg":
+				if (!"state".equalsIgnoreCase(activeType)) {
+					appendLog("agg disponibile solo in modalità state.");
+					break;
+				}
+				if (parts.length < 2) {
+					appendLog("Uso: agg <1h|12h|24h|settimana|mese|anno>");
+					break;
+				}
+				String target = parts[1];
+				if (!Arrays.asList(ExplorerConfig.stateAggregationOptions()).contains(target)) {
+					appendLog("Aggregazione non valida: " + target);
+					break;
+				}
+				stateAggregationCombo.setSelectedItem(target);
+				appendLog("Aggregazione impostata: " + target);
+				break;
+			case "clear":
+				statusArea.setText("");
+				appendLog("Console pulita.");
+				break;
+			default:
+				appendLog("Comando non riconosciuto. Digita help.");
+			}
+		} catch (Exception ex) {
+			appendLog("Errore comando: " + ex.getMessage());
+		}
+	}
+
+	private Long parseFlexibleDate(String text) {
+		Long iso = parseDateOrNull(text);
+		if (iso != null) {
+			return iso;
+		}
+		try {
+			SimpleDateFormat fmt = new SimpleDateFormat("dd/MM/yyyy", Locale.ROOT);
+			fmt.setLenient(false);
+			fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+			Date date = fmt.parse(text.trim());
+			return date == null ? null : date.getTime();
+		} catch (ParseException ex) {
+			return null;
+		}
+	}
+
+	private void removeAddedSeries(int oneBased) {
+		if (dataset.getSeriesCount() <= 1) {
+			appendLog("Nessuna serie aggiunta da rimuovere.");
+			return;
+		}
+		int index = oneBased;
+		if (index <= 0 || index >= dataset.getSeriesCount()) {
+			appendLog("Indice non valido. Usa list per vedere le serie.");
+			return;
+		}
+		String removedKey = dataset.getSeries(index).getKey().toString();
+		dataset.removeSeries(index);
+		applySeriesStyles();
+		reloadSeriesList();
+		appendLog("Linea eliminata via console: " + removedKey);
+	}
+
+	private void listSeriesInConsole() {
+		if (dataset.getSeriesCount() == 0) {
+			appendLog("Nessuna serie caricata.");
+			return;
+		}
+		appendLog("[0] base/non removibile: " + dataset.getSeries(0).getKey());
+		for (int i = 1; i < dataset.getSeriesCount(); i++) {
+			appendLog("[" + i + "] " + dataset.getSeries(i).getKey());
+		}
+	}
+
 
 	private void appendLog(String message) {
 		statusArea.append("$ " + message + "\n");
