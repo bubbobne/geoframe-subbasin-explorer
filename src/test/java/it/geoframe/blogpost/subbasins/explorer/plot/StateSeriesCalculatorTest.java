@@ -15,8 +15,8 @@ class StateSeriesCalculatorTest {
 
 	@Test
 	void computeDeltasUsesPreviousSweAndComponentDifferences() {
-		StateSeriesCalculator.StateColumns c = new StateSeriesCalculator.StateColumns("swe", "rootzone_aet", "canopy_aet",
-				"canopy_final", "canopy_initial", "rootzone_final", "rootzone_initial", "runoff_final",
+		StateSeriesCalculator.StateColumns c = new StateSeriesCalculator.StateColumns("swe", "rootzone_aet",
+				"canopy_aet", "canopy_final", "canopy_initial", "rootzone_final", "rootzone_initial", "runoff_final",
 				"runoff_initial", "ground_final", "ground_initial");
 
 		var t1 = row(1_000L, map(10, 1, 2, 5, 3, 7, 6, 8, 2, 4, 1));
@@ -60,10 +60,12 @@ class StateSeriesCalculatorTest {
 	private Map<String, Double> map(double swe, double rootzoneAet, double canopyAet, double canopyFinal,
 			double canopyInitial, double rootzoneFinal, double rootzoneInitial, double runoffFinal,
 			double runoffInitial, double groundFinal, double groundInitial) {
-		return Map.of("swe", swe, "rootzone_aet", rootzoneAet, "canopy_aet", canopyAet, "canopy_final", canopyFinal,
-				"canopy_initial", canopyInitial, "rootzone_final", rootzoneFinal, "rootzone_initial", rootzoneInitial,
-				"runoff_final", runoffFinal, "runoff_initial", runoffInitial, "ground_final", groundFinal,
-				"ground_initial", groundInitial);
+		return Map.ofEntries(Map.entry("swe", swe), Map.entry("rootzone_aet", rootzoneAet),
+				Map.entry("canopy_aet", canopyAet), Map.entry("canopy_final", canopyFinal),
+				Map.entry("canopy_initial", canopyInitial), Map.entry("rootzone_final", rootzoneFinal),
+				Map.entry("rootzone_initial", rootzoneInitial), Map.entry("runoff_final", runoffFinal),
+				Map.entry("runoff_initial", runoffInitial), Map.entry("ground_final", groundFinal),
+				Map.entry("ground_initial", groundInitial));
 	}
 
 	private long utcMs(int y, int m, int d) {

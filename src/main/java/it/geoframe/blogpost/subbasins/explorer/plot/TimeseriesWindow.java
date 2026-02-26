@@ -88,6 +88,7 @@ public final class TimeseriesWindow {
 	private final ChartPanel chartPanel;
 	private int consoleInputStart = 0;
 
+
 	public TimeseriesWindow(Component parent, ProjectConfig config, TimeseriesLoader loader,
 			Supplier<List<String>> tableSupplier, Supplier<List<String>> basinSupplier,
 			BooleanSupplier streamGaugeSelectionSupplier) {
@@ -512,25 +513,7 @@ public final class TimeseriesWindow {
 	}
 
 
-	private void addLineSeries(List<TimeseriesLoader.TimeValueRow> rows, String key, String label, Color color) {
-		TimeSeries series = new TimeSeries(label);
-		for (TimeseriesLoader.TimeValueRow row : rows) {
-			double v = value(row, key);
-			if (Double.isFinite(v)) {
-				series.addOrUpdate(new Millisecond(new Date(row.timestamp())), v);
-			}
-			out.add(new StatePoint(row.timestamp(), sweDelta, value(row, rootzoneAetCol) + value(row, canopyAetCol),
-					value(row, canopyFinalCol) - value(row, canopyInitialCol),
-					value(row, rootzoneFinalCol) - value(row, rootzoneInitialCol),
-					value(row, runoffFinalCol) - value(row, runoffInitialCol),
-					value(row, groundFinalCol) - value(row, groundInitialCol)));
-		}
-		dataset.addSeries(series);
-		renderer.setSeriesPaint(dataset.getSeriesCount() - 1, color);
-	}
 
-		return out;
-	}
 
 	private List<StatePoint> aggregateStatePoints(List<StatePoint> points, String aggregation) {
 		if (points.isEmpty()) {
@@ -578,19 +561,8 @@ public final class TimeseriesWindow {
 	}
 
 
-	private String cfg(String key, String defaultValue) {
-		return ExplorerConfig.chartOption(key, defaultValue);
-	}
 
-	private Color cfgColor(String key, String defaultHex) {
-		String raw = cfg(key, defaultHex);
-		try {
-			return Color.decode(raw.startsWith("#") ? raw : ("#" + raw));
-		} catch (NumberFormatException ex) {
-			return Color.decode(defaultHex);
-		}
-	}
-
+	
 
 	private void addLineSeries(List<TimeseriesLoader.TimeValueRow> rows, String key, String label, Color color) {
 		TimeSeries series = new TimeSeries(label);
