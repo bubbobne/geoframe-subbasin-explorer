@@ -1,51 +1,25 @@
 package it.geoframe.blogpost.subbasins.explorer.ui;
 
-import it.geoframe.blogpost.subbasins.explorer.services.ExplorerConfig;
-import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
-import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfigStore;
-import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
-import org.geotools.api.data.DataStore;
-import org.geotools.api.data.DataStoreFinder;
-import org.geotools.api.data.Query;
-import org.geotools.api.data.SimpleFeatureSource;
-import org.geotools.api.feature.simple.SimpleFeature;
-import org.geotools.api.feature.simple.SimpleFeatureType;
-import org.geotools.api.filter.Filter;
-import org.geotools.api.filter.FilterFactory;
-import org.geotools.api.filter.expression.Expression;
-import org.geotools.api.feature.type.AttributeDescriptor;
-import org.geotools.api.style.FeatureTypeStyle;
-import org.geotools.api.style.Fill;
-import org.geotools.api.style.LineSymbolizer;
-import javax.swing.Action;
-import org.geotools.api.style.Rule;
-import org.geotools.api.style.Stroke;
-import org.geotools.api.style.Style;
-import org.geotools.api.style.StyleFactory;
-import org.geotools.api.style.Symbolizer;
-import org.geotools.data.simple.SimpleFeatureCollection;
-import org.geotools.data.simple.SimpleFeatureIterator;
-import org.geotools.factory.CommonFactoryFinder;
-import org.geotools.geometry.jts.ReferencedEnvelope;
-import org.geotools.map.FeatureLayer;
-import org.geotools.map.Layer;
-import org.geotools.map.MapContent;
-import org.geotools.styling.StyleBuilder;
-import org.geotools.swing.JMapFrame;
-import org.geotools.swing.JMapPane;
-import org.geotools.swing.action.InfoAction;
-import org.geotools.swing.action.PanAction;
-import org.geotools.swing.action.ResetAction;
-import org.geotools.swing.action.ZoomInAction;
-import org.geotools.swing.action.ZoomOutAction;
-import org.geotools.swing.event.MapMouseAdapter;
-import org.geotools.swing.event.MapMouseEvent;
-import org.locationtech.jts.geom.LineString;
-import org.locationtech.jts.geom.MultiLineString;
-import org.geotools.swing.tool.PanTool;
-import org.geotools.swing.tool.ScrollWheelTool;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+
 import javax.swing.AbstractAction;
+import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -58,19 +32,50 @@ import javax.swing.JTextArea;
 import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
+import org.geotools.api.data.DataStore;
+import org.geotools.api.data.DataStoreFinder;
+import org.geotools.api.data.Query;
+import org.geotools.api.data.SimpleFeatureSource;
+import org.geotools.api.feature.simple.SimpleFeature;
+import org.geotools.api.feature.simple.SimpleFeatureType;
+import org.geotools.api.feature.type.AttributeDescriptor;
+import org.geotools.api.filter.Filter;
+import org.geotools.api.filter.FilterFactory;
+import org.geotools.api.filter.expression.Expression;
+import org.geotools.api.style.FeatureTypeStyle;
+import org.geotools.api.style.Fill;
+import org.geotools.api.style.LineSymbolizer;
+import org.geotools.api.style.Rule;
+import org.geotools.api.style.Stroke;
+import org.geotools.api.style.Style;
+import org.geotools.api.style.StyleFactory;
+import org.geotools.api.style.Symbolizer;
+import org.geotools.data.simple.SimpleFeatureCollection;
+import org.geotools.data.simple.SimpleFeatureIterator;
+import org.geotools.factory.CommonFactoryFinder;
+import org.geotools.geometry.jts.ReferencedEnvelope;
+import org.geotools.map.FeatureLayer;
+import org.geotools.map.MapContent;
+import org.geotools.styling.StyleBuilder;
+import org.geotools.swing.JMapPane;
+import org.geotools.swing.action.InfoAction;
+import org.geotools.swing.action.PanAction;
+import org.geotools.swing.action.ResetAction;
+import org.geotools.swing.action.ZoomInAction;
+import org.geotools.swing.action.ZoomOutAction;
+import org.geotools.swing.event.MapMouseAdapter;
+import org.geotools.swing.event.MapMouseEvent;
+import org.geotools.swing.tool.PanTool;
+import org.geotools.swing.tool.ScrollWheelTool;
+import org.locationtech.jts.geom.LineString;
+import org.locationtech.jts.geom.MultiLineString;
+
+import it.geoframe.blogpost.subbasins.explorer.services.ExplorerConfig;
+import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
+import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfigStore;
+import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 
 /**
  *
@@ -201,8 +206,10 @@ public final class SubbasinExplorerPanel extends JPanel {
 	private void openChartsPlaceholderView() {
 		JDialog dialog = new JDialog();
 		dialog.setModal(false);
-		dialog.setTitle("Vista grafici (placeholder)");
+		dialog.setTitle("Vista grafici simulazioni");
 		dialog.setLayout(new BorderLayout(8, 8));
+		String[] simulationTables = loadSimulationTableNames();
+
 
 		JPanel controlsPanel = new JPanel(new GridBagLayout());
 		GridBagConstraints gbc = new GridBagConstraints();
@@ -212,26 +219,24 @@ public final class SubbasinExplorerPanel extends JPanel {
 
 		gbc.gridx = 0;
 		gbc.gridy = 0;
-		controlsPanel.add(new JLabel("Dominio:"), gbc);
+		
+		dialog.setTitle("Vista grafici simulazioni");
 		gbc.gridy++;
-		controlsPanel.add(new JComboBox<>(new String[] { "Snow", "Canopy", "Root zone", "Groundwater" }), gbc);
-
+		controlsPanel.add(new JComboBox<>(simulationTables), gbc);
 		gbc.gridy++;
-		controlsPanel.add(new JLabel("Variabile:"), gbc);
+		controlsPanel.add(new JLabel("Tipo Grafici:"), gbc);
 		gbc.gridy++;
 		controlsPanel.add(new JComboBox<>(new String[] { "Portata", "Stato", "Flusso" }), gbc);
 
-		gbc.gridy++;
-		controlsPanel.add(new JLabel("Aggregazione:"), gbc);
-		gbc.gridy++;
-		controlsPanel.add(new JComboBox<>(new String[] { "Oraria", "Giornaliera", "Mensile" }), gbc);
+
 
 		JTextArea placeholder = new JTextArea();
 		placeholder.setEditable(false);
 		placeholder.setLineWrap(true);
 		placeholder.setWrapStyleWord(true);
-		placeholder.setText("Questa vista multi-panel per i grafici non è ancora implementata.\n"
-				+ "Qui verranno mostrati i grafici selezionati dai menu a tendina.");
+		placeholder.setText("Seleziona una tabella che inizia con 'sim' dal GeoPackage e il tipo di grafico.\n"
+				+ "Questa è ancora una vista placeholder: qui verrà mostrata l'anteprima del grafico.");
+
 
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, new JScrollPane(placeholder));
 		splitPane.setResizeWeight(0.35);
@@ -242,6 +247,42 @@ public final class SubbasinExplorerPanel extends JPanel {
 		dialog.setVisible(true);
 	}
 
+	
+	private String[] loadSimulationTableNames() {
+		
+		
+		String path=null;
+		ProjectConfigStore.load().ifPresent(cfg -> path= cfg.geopackagePath().toString());
+
+		try {
+			Connection c = DriverManager.getConnection("jdbc:sqlite:" + path);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		if (dataStore == null) {
+			return new String[] { "Nessuna tabella sim trovata" };
+		}
+		try {
+			String[] typeNames = dataStore.getTypeNames();
+			List<String> simulationTables = new ArrayList<>();
+			for (String typeName : typeNames) {
+				if (typeName != null && typeName.toLowerCase(Locale.ROOT).startsWith("sim")) {
+					simulationTables.add(typeName);
+				}
+			}
+			if (simulationTables.isEmpty()) {
+				return new String[] { "Nessuna tabella sim trovata 2" };
+			}
+			return simulationTables.toArray(String[]::new);
+		} catch (IOException e) {
+			statusLabel.setText("Errore lettura tabelle simulazione: " + e.getMessage());
+			return new String[] { "Errore caricamento tabelle" };
+		}
+	}
+
+
+	
 	private void loadMapLayers() {
 		try {
 			Optional<SimpleFeatureSource> source = loadSubbasinSource();
