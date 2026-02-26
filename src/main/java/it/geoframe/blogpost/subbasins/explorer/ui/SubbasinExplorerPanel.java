@@ -2,17 +2,12 @@ package it.geoframe.blogpost.subbasins.explorer.ui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -24,8 +19,6 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
-import javax.swing.JComboBox;
-import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -34,7 +27,6 @@ import javax.swing.JTextArea;
 import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
-import javax.swing.WindowConstants;
 import java.util.ArrayList;
 import java.util.List;
 import org.geotools.api.data.DataStore;
@@ -80,12 +72,11 @@ import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfigStore;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectValidator;
-import org.jfree.chart.ChartFactory;
-import org.jfree.chart.ChartPanel;
-import org.jfree.chart.JFreeChart;
-import org.jfree.data.time.Millisecond;
-import org.jfree.data.time.TimeSeries;
-import org.jfree.data.time.TimeSeriesCollection;
+import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesLoader;
+import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesRepository;
+import it.geoframe.blogpost.subbasins.explorer.model.ChartRequest;
+import it.geoframe.blogpost.subbasins.explorer.plot.ChartSetupDialog;
+import it.geoframe.blogpost.subbasins.explorer.plot.TimeseriesWindow;
 
 /**
  *
@@ -106,6 +97,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 	private String selectedFeatureId;
 	private String selectedSubbasinId;
 	private TimeseriesWindow timeseriesWindow;
+	private final TimeseriesLoader timeseriesLoader = new TimeseriesLoader(new TimeseriesRepository());
 
 	private DataStore dataStore;
 	private SimpleFeatureSource subbasinSource;
@@ -220,7 +212,15 @@ public final class SubbasinExplorerPanel extends JPanel {
 			statusLabel.setText("Seleziona prima un sottobacino.");
 			return;
 		}
-		new ChartSetupDialog().showDialog();
+		new ChartSetupDialog(this, config.mode(), loadSimulationTableNames(), this::openTimeseriesWindow).showDialog();
+	}
+
+	private void openTimeseriesWindow(ChartRequest request) {
+		if (timeseriesWindow == null) {
+			timeseriesWindow = new TimeseriesWindow(this, config, timeseriesLoader, this::loadAllTableNamesFromInputs,
+					this::loadBasinIds, this::isSelectedSubbasinStreamGauge);
+		}
+		timeseriesWindow.showForSelection(selectedSubbasinId, request.simulationTable(), request.chartType());
 	}
 
 	private String[] loadSimulationTableNames() {
@@ -238,31 +238,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 	}
 
 	private List<String> loadAllTableNamesFromInputs() {
-		List<String> out = new ArrayList<>();
-		if (config == null) {
-			return out;
-		}
-		out.addAll(listTableNamesFromDb(config.geopackagePath()));
-		out.addAll(listTableNamesFromDb(config.sqlitePath()));
-		return out;
-	}
-
-	private List<String> listTableNamesFromDb(java.nio.file.Path dbPath) {
-		if (dbPath == null) {
-			return List.of();
-		}
-		List<String> out = new ArrayList<>();
-		String sql = "SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name";
-		try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
-				PreparedStatement ps = c.prepareStatement(sql);
-				ResultSet rs = ps.executeQuery()) {
-			while (rs.next()) {
-				out.add(rs.getString(1));
-			}
-		} catch (SQLException e) {
-			statusLabel.setText("Errore lettura tabelle da " + dbPath.getFileName() + ": " + e.getMessage());
-		}
-		return out;
+		return timeseriesLoader.listAllTableNames(config);
 	}
 
 	private List<String> loadBasinIds() {
@@ -649,205 +625,6 @@ public final class SubbasinExplorerPanel extends JPanel {
 		return false;
 	}
 
-	private final class ChartSetupDialog {
-		private final JDialog dialog = new JDialog();
-		private final JComboBox<String> simulationCombo = new JComboBox<>();
-		private final JComboBox<String> typeCombo = new JComboBox<>(new String[] { "discharge", "state", "fluxes" });
-
-		private ChartSetupDialog() {
-			dialog.setModal(false);
-			dialog.setTitle("Selezione grafico");
-			dialog.setLayout(new BorderLayout(8, 8));
-			dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-			JPanel panel = new JPanel(new GridBagLayout());
-			GridBagConstraints gbc = new GridBagConstraints();
-			gbc.gridx = 0;
-			gbc.gridy = 0;
-			gbc.insets = new Insets(6, 6, 6, 6);
-			gbc.fill = GridBagConstraints.HORIZONTAL;
-			gbc.weightx = 1;
-			if (config.mode() == ProjectMode.GEOPACKAGE) {
-				panel.add(new JLabel("Simulazione da plottare:"), gbc);
-				gbc.gridy++;
-				for (String t : loadSimulationTableNames()) {
-					simulationCombo.addItem(t);
-				}
-				panel.add(simulationCombo, gbc);
-				gbc.gridy++;
-			}
-			panel.add(new JLabel("Tipo grafico:"), gbc);
-			gbc.gridy++;
-			panel.add(typeCombo, gbc);
-			gbc.gridy++;
-			JButton nextButton = new JButton("Avanti");
-			nextButton.addActionListener(e -> {
-				dialog.dispose();
-				if (timeseriesWindow == null) {
-					timeseriesWindow = new TimeseriesWindow();
-				}
-				timeseriesWindow.showForSelection(selectedSubbasinId, (String) simulationCombo.getSelectedItem(),
-						(String) typeCombo.getSelectedItem());
-			});
-			panel.add(nextButton, gbc);
-			dialog.add(panel, BorderLayout.CENTER);
-			dialog.setSize(new Dimension(420, 260));
-			dialog.setLocationRelativeTo(SubbasinExplorerPanel.this);
-		}
-
-		private void showDialog() {
-			dialog.setVisible(true);
-		}
-	}
-
-	private final class TimeseriesWindow {
-		private final JDialog dialog;
-		private final JComboBox<String> tableCombo;
-		private final JComboBox<String> basinCombo;
-		private final JComboBox<String> streamGaugeCombo;
-		private final JTextArea statusArea;
-		private final TimeSeriesCollection dataset;
-		private String activeSubbasinId;
-		private String activeType;
-
-		private TimeseriesWindow() {
-			dialog = new JDialog();
-			dialog.setModal(false);
-			dialog.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
-			dialog.setTitle("Vista grafico");
-			dialog.setLayout(new BorderLayout(8, 8));
-			dataset = new TimeSeriesCollection();
-			JFreeChart chart = ChartFactory.createTimeSeriesChart("Timeseries", "Tempo", "Valore", dataset, true, true,
-					false);
-			JPanel controlsPanel = new JPanel(new GridBagLayout());
-			GridBagConstraints gbc = new GridBagConstraints();
-			gbc.insets = new Insets(4, 4, 4, 4);
-			gbc.fill = GridBagConstraints.HORIZONTAL;
-			gbc.weightx = 1;
-			gbc.gridx = 0;
-			gbc.gridy = 0;
-			tableCombo = new JComboBox<>();
-			basinCombo = new JComboBox<>();
-			streamGaugeCombo = new JComboBox<>();
-			controlsPanel.add(new JLabel("Tabella da aggiungere:"), gbc);
-			gbc.gridy++;
-			controlsPanel.add(tableCombo, gbc);
-			gbc.gridy++;
-			controlsPanel.add(new JLabel("Sottobacino:"), gbc);
-			gbc.gridy++;
-			controlsPanel.add(basinCombo, gbc);
-			gbc.gridy++;
-			if (config.mode() == ProjectMode.GEOPACKAGE) {
-				controlsPanel.add(new JLabel("Stream gauge (se presente):"), gbc);
-				gbc.gridy++;
-				controlsPanel.add(streamGaugeCombo, gbc);
-				gbc.gridy++;
-			}
-			JButton addButton = new JButton("Carica");
-			addButton.addActionListener(e -> addSelectedSeries());
-			controlsPanel.add(addButton, gbc);
-			statusArea = new JTextArea();
-			statusArea.setEditable(false);
-			statusArea.setLineWrap(true);
-			statusArea.setWrapStyleWord(true);
-			JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, new ChartPanel(chart));
-			splitPane.setResizeWeight(0.28);
-			dialog.add(splitPane, BorderLayout.CENTER);
-			dialog.add(new JScrollPane(statusArea), BorderLayout.SOUTH);
-			dialog.setSize(new Dimension(1180, 680));
-			dialog.setLocationRelativeTo(SubbasinExplorerPanel.this);
-		}
-
-		private void showForSelection(String subbasinId, String firstTable, String type) {
-			this.activeSubbasinId = subbasinId;
-			this.activeType = type == null ? "discharge" : type;
-			dataset.removeAllSeries();
-			reloadCombos();
-			if (subbasinId != null) {
-				basinCombo.setSelectedItem(subbasinId);
-			}
-			if (firstTable != null) {
-				tableCombo.setSelectedItem(firstTable);
-			}
-			dialog.setTitle("Vista " + activeType);
-			dialog.setVisible(true);
-			addSelectedSeries();
-		}
-
-		private void reloadCombos() {
-			tableCombo.removeAllItems();
-			for (String table : loadAllTableNamesFromInputs()) {
-				tableCombo.addItem(table);
-			}
-			basinCombo.removeAllItems();
-			for (String id : loadBasinIds()) {
-				basinCombo.addItem(id);
-			}
-			streamGaugeCombo.removeAllItems();
-			if (config.mode() == ProjectMode.GEOPACKAGE && isSelectedSubbasinStreamGauge()) {
-				for (String table : loadAllTableNamesFromInputs()) {
-					streamGaugeCombo.addItem(table);
-				}
-			}
-		}
-
-		private void addSelectedSeries() {
-			String table = (String) tableCombo.getSelectedItem();
-			String basinId = (String) basinCombo.getSelectedItem();
-			if (table == null || basinId == null) {
-				statusArea.setText("Seleziona tabella e sottobacino.");
-				return;
-			}
-			TimeSeries series = new TimeSeries(table + " | basin " + basinId);
-			int count = fillSeriesFromAnyInput(table, basinId, series);
-			if (count > 0) {
-				dataset.addSeries(series);
-				statusArea.setText("Aggiunta serie: " + table + "\nBasin ID: " + basinId + "\nPunti: " + count);
-				return;
-			}
-			if (config.mode() == ProjectMode.GEOPACKAGE && isSelectedSubbasinStreamGauge()) {
-				String sgTable = (String) streamGaugeCombo.getSelectedItem();
-				if (sgTable != null) {
-					TimeSeries sgSeries = new TimeSeries("stream gauge | " + sgTable + " | basin " + basinId);
-					int sgCount = fillSeriesFromAnyInput(sgTable, basinId, sgSeries);
-					if (sgCount > 0) {
-						dataset.addSeries(sgSeries);
-						statusArea.append("\nAggiunta serie stream gauge: " + sgTable + " (" + sgCount + " punti)");
-					}
-				}
-			}
-		}
-
-		private int fillSeriesFromAnyInput(String table, String basinId, TimeSeries series) {
-			int count = fillSeriesFromDb(config.geopackagePath(), table, basinId, series);
-			if (count > 0) return count;
-			return fillSeriesFromDb(config.sqlitePath(), table, basinId, series);
-		}
-
-		private int fillSeriesFromDb(java.nio.file.Path dbPath, String table, String basinId, TimeSeries series) {
-			if (dbPath == null) return 0;
-			String safeTable = table.replace("\"", "\"\"");
-			//@todo basiid!!!! 
-			String sql = "SELECT ts, value FROM \"" + safeTable + "\" WHERE basin_id=? ORDER BY ts";
-			try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
-					PreparedStatement ps = c.prepareStatement(sql)) {
-				ps.setInt(1, Integer.valueOf(basinId));
-				int count = 0;
-				try (ResultSet rs = ps.executeQuery()) {
-					while (rs.next()) {
-						long ts = rs.getLong("ts");
-						double value = rs.getDouble("value");
-						if (!rs.wasNull()) {
-							series.addOrUpdate(new Millisecond(new java.util.Date(ts)), value);
-							count++;
-						}
-					}
-				}
-				return count;
-			} catch (SQLException ex) {
-				return 0;
-			}
-		}
-	}
 
 	private void refreshSubbasinStyle() {
 		if (subbasinLayer == null || subbasinSource == null) {
