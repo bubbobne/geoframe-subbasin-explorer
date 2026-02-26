@@ -46,6 +46,19 @@ public final class ExplorerConfig {
 		return get("tables.geopackage.simulation.prefix", "sim");
 	}
 
+	public static String timeseriesTimestampColumn() {
+		return get("tables.timeseries.columns.timestamp", "ts");
+	}
+
+	public static String timeseriesValueColumn() {
+		return get("tables.timeseries.columns.value", "value");
+	}
+
+	public static String[] timeseriesBasinIdCandidates() {
+		String configured = get("tables.timeseries.columns.basin-id.candidates", "basin_id,basinid,id");
+		return configured.split(",");
+	}
+
 	private static String get(String key, String defaultValue) {
 		String v = PROPS.getProperty(key);
 		return (v == null || v.isBlank()) ? defaultValue : v.trim();
