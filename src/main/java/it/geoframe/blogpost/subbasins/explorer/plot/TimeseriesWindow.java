@@ -149,6 +149,27 @@ public final class TimeseriesWindow {
 		modeControlsContainer.add(buildFluxesControls(), "fluxes");
 		controlsPanel.add(modeControlsContainer, gbc);
 		gbc.gridy++;
+		JButton panButton = new JButton("Pan ON/OFF");
+		panButton.addActionListener(e -> {
+			boolean next = !plot.isDomainPannable();
+			plot.setDomainPannable(next);
+			plot.setRangePannable(next);
+			appendLog("Pan " + (next ? "attivato" : "disattivato") + ".");
+		});
+		controlsPanel.add(panButton, gbc);
+		gbc.gridy++;
+		JButton zoomRectButton = new JButton("Zoom rettangolo ON/OFF");
+		zoomRectButton.addActionListener(e -> {
+			boolean next = !chartPanel.getFillZoomRectangle();
+			chartPanel.setFillZoomRectangle(next);
+			appendLog("Zoom rettangolo " + (next ? "attivato" : "disattivato") + ".");
+		});
+		controlsPanel.add(zoomRectButton, gbc);
+		gbc.gridy++;
+		JButton resetZoomButton = new JButton("Reset zoom");
+		resetZoomButton.addActionListener(e -> chartPanel.restoreAutoBounds());
+		controlsPanel.add(resetZoomButton, gbc);
+		gbc.gridy++;
 		controlsPanel.add(new JLabel("Linee nel grafico:"), gbc);
 		gbc.gridy++;
 		controlsPanel.add(new JScrollPane(seriesList), gbc);
