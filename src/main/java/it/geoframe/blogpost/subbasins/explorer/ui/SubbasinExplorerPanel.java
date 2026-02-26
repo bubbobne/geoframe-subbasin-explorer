@@ -80,6 +80,7 @@ import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfigStore;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectValidator;
+import it.geoframe.blogpost.subbasins.explorer.services.TimeseriesRepository;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
@@ -106,6 +107,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 	private String selectedFeatureId;
 	private String selectedSubbasinId;
 	private TimeseriesWindow timeseriesWindow;
+	private final TimeseriesRepository timeseriesRepository = new TimeseriesRepository();
 
 	private DataStore dataStore;
 	private SimpleFeatureSource subbasinSource;
@@ -238,30 +240,12 @@ public final class SubbasinExplorerPanel extends JPanel {
 	}
 
 	private List<String> loadAllTableNamesFromInputs() {
-		List<String> out = new ArrayList<>();
 		if (config == null) {
-			return out;
-		}
-		out.addAll(listTableNamesFromDb(config.geopackagePath()));
-		out.addAll(listTableNamesFromDb(config.sqlitePath()));
-		return out;
-	}
-
-	private List<String> listTableNamesFromDb(java.nio.file.Path dbPath) {
-		if (dbPath == null) {
 			return List.of();
 		}
 		List<String> out = new ArrayList<>();
-		String sql = "SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name";
-		try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
-				PreparedStatement ps = c.prepareStatement(sql);
-				ResultSet rs = ps.executeQuery()) {
-			while (rs.next()) {
-				out.add(rs.getString(1));
-			}
-		} catch (SQLException e) {
-			statusLabel.setText("Errore lettura tabelle da " + dbPath.getFileName() + ": " + e.getMessage());
-		}
+		out.addAll(timeseriesRepository.listTables(config.geopackagePath()));
+		out.addAll(timeseriesRepository.listTables(config.sqlitePath()));
 		return out;
 	}
 
@@ -819,23 +803,39 @@ public final class SubbasinExplorerPanel extends JPanel {
 
 		private int fillSeriesFromAnyInput(String table, String basinId, TimeSeries series) {
 			int count = fillSeriesFromDb(config.geopackagePath(), table, basinId, series);
-			if (count > 0) return count;
+			if (count > 0) {
+				return count;
+			}
 			return fillSeriesFromDb(config.sqlitePath(), table, basinId, series);
 		}
 
 		private int fillSeriesFromDb(java.nio.file.Path dbPath, String table, String basinId, TimeSeries series) {
-			if (dbPath == null) return 0;
+			if (dbPath == null || table == null || basinId == null) {
+				return 0;
+			}
+
+			Set<String> columns = timeseriesRepository.listColumnNames(dbPath, table);
+			Optional<String> basinColumn = timeseriesRepository.findFirstColumnIgnoreCase(columns,
+					ExplorerConfig.timeseriesBasinIdCandidates());
+			Optional<String> tsColumn = timeseriesRepository.findFirstColumnIgnoreCase(columns,
+					new String[] { ExplorerConfig.timeseriesTimestampColumn(), "timestamp", "date", "time" });
+			Optional<String> valueColumn = timeseriesRepository.findFirstColumnIgnoreCase(columns,
+					new String[] { ExplorerConfig.timeseriesValueColumn(), "simulated", "obs", "q" });
+			if (basinColumn.isEmpty() || tsColumn.isEmpty() || valueColumn.isEmpty()) {
+				return 0;
+			}
+
 			String safeTable = table.replace("\"", "\"\"");
-			//@todo basiid!!!! 
-			String sql = "SELECT ts, value FROM \"" + safeTable + "\" WHERE basin_id=? ORDER BY ts";
+			String sql = "SELECT \"" + tsColumn.get() + "\", \"" + valueColumn.get() + "\" FROM \"" + safeTable
+					+ "\" WHERE \"" + basinColumn.get() + "\"=? ORDER BY \"" + tsColumn.get() + "\"";
 			try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
 					PreparedStatement ps = c.prepareStatement(sql)) {
-				ps.setInt(1, Integer.valueOf(basinId));
+				ps.setString(1, basinId);
 				int count = 0;
 				try (ResultSet rs = ps.executeQuery()) {
 					while (rs.next()) {
-						long ts = rs.getLong("ts");
-						double value = rs.getDouble("value");
+						long ts = rs.getLong(1);
+						double value = rs.getDouble(2);
 						if (!rs.wasNull()) {
 							series.addOrUpdate(new Millisecond(new java.util.Date(ts)), value);
 							count++;
