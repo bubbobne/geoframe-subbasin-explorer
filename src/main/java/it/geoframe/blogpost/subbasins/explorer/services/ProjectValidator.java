@@ -116,13 +116,13 @@ public final class ProjectValidator {
 				errors.add("GeoPackage: missing table with prefix '" + topologyPrefix + "'.");
 			}
 
-			// at least one table starting with "simulation"
-			boolean hasSimulation = anyTableStartsWith(c, simulationPrefix);
+			// at least one table containing simulation+discharge (eg sim*_simulation_discharge)
+			List<String> sims = listSimulationDischargeTables(c, simulationPrefix, 10);
+			boolean hasSimulation = !sims.isEmpty();
 			if (hasSimulation) {
-				List<String> sims = listTablesStartingWith(c, simulationPrefix, 10);
 				info.add("✅ GeoPackage simulation tables detected: " + sims + (sims.size() == 10 ? " …" : ""));
 			} else {
-				errors.add("GeoPackage: missing at least one table starting with '" + simulationPrefix + "*'.");
+				errors.add("GeoPackage: missing at least one table containing '" + simulationPrefix + "' and 'discharge'.");
 			}
 
 			// Optional: basic gpkg sanity
@@ -210,6 +210,33 @@ public final class ProjectValidator {
 			try (ResultSet rs = ps.executeQuery()) {
 				while (rs.next())
 					out.add(rs.getString(1));
+			}
+		}
+		return out;
+	}
+
+	public static List<String> listSimulationDischargeTables(Path sqliteDbPath, String simulationPrefix, int limit)
+			throws SQLException {
+		try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + sqliteDbPath)) {
+			return listSimulationDischargeTables(c, simulationPrefix, limit);
+		}
+	}
+
+	private static List<String> listSimulationDischargeTables(Connection c, String simulationPrefix, int limit)
+			throws SQLException {
+		List<String> out = new ArrayList<>();
+		try (PreparedStatement ps = c.prepareStatement(
+				"SELECT name FROM sqlite_master "
+						+ "WHERE type IN ('table','view') "
+						+ "AND lower(name) LIKE lower(?) "
+						+ "AND instr(lower(name), 'discharge') > 0 "
+						+ "ORDER BY name LIMIT ?")) {
+			ps.setString(1, simulationPrefix + "%");
+			ps.setInt(2, limit);
+			try (ResultSet rs = ps.executeQuery()) {
+				while (rs.next()) {
+					out.add(rs.getString(1));
+				}
 			}
 		}
 		return out;
