@@ -17,6 +17,7 @@ import java.util.function.Supplier;
 
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -47,6 +48,7 @@ public final class TimeseriesWindow {
 	private final JComboBox<String> tableCombo;
 	private final JComboBox<String> basinCombo;
 	private final JComboBox<String> streamGaugeCombo;
+	private final JComboBox<String> seriesCombo;
 	private final JTextArea statusArea;
 	private final TimeSeriesCollection dataset;
 	private String activeType;
@@ -81,6 +83,7 @@ public final class TimeseriesWindow {
 		tableCombo = new JComboBox<>();
 		basinCombo = new JComboBox<>();
 		streamGaugeCombo = new JComboBox<>();
+		seriesCombo = new JComboBox<>();
 		controlsPanel.add(new JLabel("Tabella da aggiungere:"), gbc);
 		gbc.gridy++;
 		controlsPanel.add(tableCombo, gbc);
@@ -106,6 +109,14 @@ public final class TimeseriesWindow {
 		JButton clearExtraLinesButton = new JButton("Tieni solo portata base");
 		clearExtraLinesButton.addActionListener(e -> keepOnlyBaseSeries());
 		controlsPanel.add(clearExtraLinesButton, gbc);
+		gbc.gridy++;
+		controlsPanel.add(new JLabel("Linee nel grafico:"), gbc);
+		gbc.gridy++;
+		controlsPanel.add(seriesCombo, gbc);
+		gbc.gridy++;
+		JButton removeSelectedLineButton = new JButton("Elimina linea selezionata");
+		removeSelectedLineButton.addActionListener(e -> removeSelectedSeries());
+		controlsPanel.add(removeSelectedLineButton, gbc);
 		statusArea = new JTextArea();
 		statusArea.setEditable(false);
 		statusArea.setLineWrap(true);
@@ -122,6 +133,7 @@ public final class TimeseriesWindow {
 		this.activeType = type == null ? "discharge" : type;
 		dataset.removeAllSeries();
 		baseSeriesKey = null;
+		reloadSeriesCombo();
 		reloadCombos();
 		if (subbasinId != null) {
 			basinCombo.setSelectedItem(subbasinId);
@@ -201,6 +213,7 @@ public final class TimeseriesWindow {
 		}
 		dataset.addSeries(series);
 		applySeriesStyles();
+		reloadSeriesCombo();
 		statusArea.setText("Aggiunta serie: " + table + "\nBasin ID: " + basinId + "\nPunti: " + count);
 	}
 
@@ -222,13 +235,40 @@ public final class TimeseriesWindow {
 			statusArea.setText("Non ci sono linee aggiuntive da rimuovere.");
 			return;
 		}
-		for (int i = dataset.getSeriesCount() - 1; i >= 0; i--) {
-			String key = dataset.getSeries(i).getKey().toString();
-			if (!key.equals(baseSeriesKey)) {
-				dataset.removeSeries(i);
-			}
+		for (int i = dataset.getSeriesCount() - 1; i >= 1; i--) {
+			dataset.removeSeries(i);
 		}
 		applySeriesStyles();
+		reloadSeriesCombo();
 		statusArea.setText("Rimosse le linee aggiuntive. Tenuta solo la portata base.");
+	}
+
+	private void reloadSeriesCombo() {
+		DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>();
+		for (int i = 0; i < dataset.getSeriesCount(); i++) {
+			model.addElement(dataset.getSeries(i).getKey().toString());
+		}
+		seriesCombo.setModel(model);
+	}
+
+	private void removeSelectedSeries() {
+		if (dataset.getSeriesCount() == 0) {
+			statusArea.setText("Non ci sono linee da eliminare.");
+			return;
+		}
+		int selectedIndex = seriesCombo.getSelectedIndex();
+		if (selectedIndex < 0 || selectedIndex >= dataset.getSeriesCount()) {
+			statusArea.setText("Seleziona una linea da eliminare.");
+			return;
+		}
+		if (selectedIndex == 0) {
+			statusArea.setText("La portata base non può essere eliminata.");
+			return;
+		}
+		String removedKey = dataset.getSeries(selectedIndex).getKey().toString();
+		dataset.removeSeries(selectedIndex);
+		applySeriesStyles();
+		reloadSeriesCombo();
+		statusArea.setText("Linea eliminata: " + removedKey);
 	}
 }
