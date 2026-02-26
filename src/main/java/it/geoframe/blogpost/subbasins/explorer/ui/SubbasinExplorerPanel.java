@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -23,6 +25,9 @@ import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.DefaultListModel;
+import javax.swing.JList;
+import javax.swing.ListSelectionModel;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -32,6 +37,7 @@ import javax.swing.JTextArea;
 import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.WindowConstants;
 import java.util.ArrayList;
 import java.util.List;
 import org.geotools.api.data.DataStore;
@@ -76,6 +82,15 @@ import it.geoframe.blogpost.subbasins.explorer.services.ExplorerConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfigStore;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
+import it.geoframe.blogpost.subbasins.explorer.services.ProjectValidator;
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.plot.XYPlot;
+import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
+import org.jfree.data.time.Millisecond;
+import org.jfree.data.time.TimeSeries;
+import org.jfree.data.time.TimeSeriesCollection;
 
 /**
  *
@@ -94,6 +109,8 @@ public final class SubbasinExplorerPanel extends JPanel {
 	private final FilterFactory ff = CommonFactoryFinder.getFilterFactory();
 	private FeatureLayer subbasinLayer;
 	private String selectedFeatureId;
+	private String selectedSubbasinId;
+	private TimeseriesWindow timeseriesWindow;
 
 	private DataStore dataStore;
 	private SimpleFeatureSource subbasinSource;
@@ -204,85 +221,76 @@ public final class SubbasinExplorerPanel extends JPanel {
 	}
 
 	private void openChartsPlaceholderView() {
-		JDialog dialog = new JDialog();
-		dialog.setModal(false);
-		dialog.setTitle("Vista grafici simulazioni");
-		dialog.setLayout(new BorderLayout(8, 8));
-		String[] simulationTables = loadSimulationTableNames();
-
-
-		JPanel controlsPanel = new JPanel(new GridBagLayout());
-		GridBagConstraints gbc = new GridBagConstraints();
-		gbc.insets = new Insets(4, 4, 4, 4);
-		gbc.fill = GridBagConstraints.HORIZONTAL;
-		gbc.weightx = 1;
-
-		gbc.gridx = 0;
-		gbc.gridy = 0;
-		
-		dialog.setTitle("Vista grafici simulazioni");
-		gbc.gridy++;
-		controlsPanel.add(new JComboBox<>(simulationTables), gbc);
-		gbc.gridy++;
-		controlsPanel.add(new JLabel("Tipo Grafici:"), gbc);
-		gbc.gridy++;
-		controlsPanel.add(new JComboBox<>(new String[] { "Portata", "Stato", "Flusso" }), gbc);
-
-
-
-		JTextArea placeholder = new JTextArea();
-		placeholder.setEditable(false);
-		placeholder.setLineWrap(true);
-		placeholder.setWrapStyleWord(true);
-		placeholder.setText("Seleziona una tabella che inizia con 'sim' dal GeoPackage e il tipo di grafico.\n"
-				+ "Questa è ancora una vista placeholder: qui verrà mostrata l'anteprima del grafico.");
-
-
-		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, new JScrollPane(placeholder));
-		splitPane.setResizeWeight(0.35);
-
-		dialog.add(splitPane, BorderLayout.CENTER);
-		dialog.setSize(new Dimension(760, 420));
-		dialog.setLocationRelativeTo(this);
-		dialog.setVisible(true);
+		if (selectedSubbasinId == null || selectedSubbasinId.isBlank()) {
+			statusLabel.setText("Seleziona prima un sottobacino.");
+			return;
+		}
+		new ChartSetupDialog().showDialog();
 	}
 
-	
 	private String[] loadSimulationTableNames() {
-		
-		
-		String path=null;
-		ProjectConfigStore.load().ifPresent(cfg -> path= cfg.geopackagePath().toString());
-
+		if (config == null || config.mode() != ProjectMode.GEOPACKAGE || config.geopackagePath() == null) {
+			return new String[0];
+		}
 		try {
-			Connection c = DriverManager.getConnection("jdbc:sqlite:" + path);
+			List<String> simulationTables = ProjectValidator.listSimulationDischargeTables(config.geopackagePath(),
+					ExplorerConfig.geopackageSimulationPrefix(), 500);
+			return simulationTables.toArray(String[]::new);
 		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			statusLabel.setText("Errore lettura tabelle simulazione: " + e.getMessage());
+			return new String[0];
 		}
-		if (dataStore == null) {
-			return new String[] { "Nessuna tabella sim trovata" };
+	}
+
+	private List<String> loadAllTableNamesFromInputs() {
+		List<String> out = new ArrayList<>();
+		if (config == null) {
+			return out;
 		}
-		try {
-			String[] typeNames = dataStore.getTypeNames();
-			List<String> simulationTables = new ArrayList<>();
-			for (String typeName : typeNames) {
-				if (typeName != null && typeName.toLowerCase(Locale.ROOT).startsWith("sim")) {
-					simulationTables.add(typeName);
+		out.addAll(listTableNamesFromDb(config.geopackagePath()));
+		out.addAll(listTableNamesFromDb(config.sqlitePath()));
+		return out;
+	}
+
+	private List<String> listTableNamesFromDb(java.nio.file.Path dbPath) {
+		if (dbPath == null) {
+			return List.of();
+		}
+		List<String> out = new ArrayList<>();
+		String sql = "SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name";
+		try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
+				PreparedStatement ps = c.prepareStatement(sql);
+				ResultSet rs = ps.executeQuery()) {
+			while (rs.next()) {
+				out.add(rs.getString(1));
+			}
+		} catch (SQLException e) {
+			statusLabel.setText("Errore lettura tabelle da " + dbPath.getFileName() + ": " + e.getMessage());
+		}
+		return out;
+	}
+
+	private List<String> loadBasinIds() {
+		List<String> out = new ArrayList<>();
+		if (subbasinSource == null) {
+			return out;
+		}
+		java.util.LinkedHashSet<String> uniq = new java.util.LinkedHashSet<>();
+		try (SimpleFeatureIterator it = subbasinSource.getFeatures().features()) {
+			while (it.hasNext()) {
+				SimpleFeature f = it.next();
+				String id = extractSubbasinId(f);
+				if (id != null && !id.isBlank()) {
+					uniq.add(id);
 				}
 			}
-			if (simulationTables.isEmpty()) {
-				return new String[] { "Nessuna tabella sim trovata 2" };
-			}
-			return simulationTables.toArray(String[]::new);
 		} catch (IOException e) {
-			statusLabel.setText("Errore lettura tabelle simulazione: " + e.getMessage());
-			return new String[] { "Errore caricamento tabelle" };
+			statusLabel.setText("Errore lettura ID sottobacini: " + e.getMessage());
 		}
+		out.addAll(uniq);
+		return out;
 	}
 
-
-	
 	private void loadMapLayers() {
 		try {
 			Optional<SimpleFeatureSource> source = loadSubbasinSource();
@@ -442,7 +450,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 		Rule defaultRule = createPolygonRule(styleBuilder, DEFAULT_COLOR, geomName);
 		defaultRule.setElseFilter(true);
 		FeatureTypeStyle fts = styleFactory
-				.createFeatureTypeStyle(new Rule[] { selectedRule,lakeRule, streamGaugeRule, defaultRule });
+				.createFeatureTypeStyle(new Rule[] { selectedRule, lakeRule, streamGaugeRule, defaultRule });
 
 		Style style = styleFactory.createStyle();
 		style.featureTypeStyles().add(fts);
@@ -541,7 +549,6 @@ public final class SubbasinExplorerPanel extends JPanel {
 		refreshSubbasinStyle();
 	}
 
-
 	
 	private void handleMapClick(MapMouseEvent ev) {
 		if (subbasinSource == null) {
@@ -583,6 +590,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 
 	private void updateInfo(SimpleFeature feature) {
 		selectedFeatureId = feature.getID();
+		selectedSubbasinId = extractSubbasinId(feature);
 		refreshSubbasinStyle();
 
 		StringBuilder sb = new StringBuilder();
@@ -594,6 +602,359 @@ public final class SubbasinExplorerPanel extends JPanel {
 		}
 		infoArea.setText(sb.toString());
 		infoArea.setCaretPosition(0);
+	}
+
+	private String extractSubbasinId(SimpleFeature feature) {
+		Object value = feature.getAttribute("basin_id");
+		if (value == null) {
+			value = feature.getAttribute("id");
+		}
+		if (value == null) {
+			value = feature.getAttribute("ID");
+		}
+		if (value == null) {
+			String fid = feature.getID();
+			if (fid == null) {
+				return null;
+			}
+			int dot = fid.lastIndexOf('.');
+			return dot >= 0 ? fid.substring(dot + 1) : fid;
+		}
+		return String.valueOf(value);
+	}
+
+	private boolean isSelectedSubbasinStreamGauge() {
+		if (subbasinSource == null || selectedFeatureId == null) {
+			return false;
+		}
+		String streamField = resolveStreamGaugeField(subbasinSource.getSchema());
+		if (streamField == null) {
+			return false;
+		}
+		try {
+			SimpleFeatureCollection collection = subbasinSource.getFeatures();
+			try (SimpleFeatureIterator it = collection.features()) {
+				while (it.hasNext()) {
+					SimpleFeature f = it.next();
+					if (selectedFeatureId.equals(f.getID())) {
+						Object v = f.getAttribute(streamField);
+						if (v == null) return false;
+						String s = String.valueOf(v).trim().toLowerCase(Locale.ROOT);
+						return !s.isBlank() && !s.equals("false") && !s.equals("0") && !s.equals("no") && !s.equals("n");
+					}
+				}
+			}
+		} catch (IOException ignored) {
+		}
+		return false;
+	}
+
+	private final class ChartSetupDialog {
+		private final JDialog dialog = new JDialog();
+		private final JComboBox<String> simulationCombo = new JComboBox<>();
+		private final JComboBox<String> typeCombo = new JComboBox<>(new String[] { "discharge", "state", "fluxes" });
+
+		private ChartSetupDialog() {
+			dialog.setModal(false);
+			dialog.setTitle("Selezione grafico");
+			dialog.setLayout(new BorderLayout(8, 8));
+			dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+			JPanel panel = new JPanel(new GridBagLayout());
+			GridBagConstraints gbc = new GridBagConstraints();
+			gbc.gridx = 0;
+			gbc.gridy = 0;
+			gbc.insets = new Insets(6, 6, 6, 6);
+			gbc.fill = GridBagConstraints.HORIZONTAL;
+			gbc.weightx = 1;
+			if (config.mode() == ProjectMode.GEOPACKAGE) {
+				panel.add(new JLabel("Simulazione da plottare:"), gbc);
+				gbc.gridy++;
+				for (String t : loadSimulationTableNames()) {
+					simulationCombo.addItem(t);
+				}
+				panel.add(simulationCombo, gbc);
+				gbc.gridy++;
+			}
+			panel.add(new JLabel("Tipo grafico:"), gbc);
+			gbc.gridy++;
+			panel.add(typeCombo, gbc);
+			gbc.gridy++;
+			JButton nextButton = new JButton("Avanti");
+			nextButton.addActionListener(e -> {
+				dialog.dispose();
+				if (timeseriesWindow == null) {
+					timeseriesWindow = new TimeseriesWindow();
+				}
+				timeseriesWindow.showForSelection(selectedSubbasinId, (String) simulationCombo.getSelectedItem(),
+						(String) typeCombo.getSelectedItem());
+			});
+			panel.add(nextButton, gbc);
+			dialog.add(panel, BorderLayout.CENTER);
+			dialog.setSize(new Dimension(420, 260));
+			dialog.setLocationRelativeTo(SubbasinExplorerPanel.this);
+		}
+
+		private void showDialog() {
+			dialog.setVisible(true);
+		}
+	}
+
+	private final class TimeseriesWindow {
+		private final JDialog dialog;
+		private final JComboBox<String> tableCombo;
+		private final JComboBox<String> basinCombo;
+		private final JComboBox<String> streamGaugeCombo;
+		private final JTextArea statusArea;
+		private final TimeSeriesCollection dataset;
+		private final DefaultListModel<String> loadedSeriesModel;
+		private final JList<String> loadedSeriesList;
+		private final java.util.Map<String, TimeSeries> loadedSeries = new java.util.LinkedHashMap<>();
+		private JFreeChart chart;
+		private String activeSubbasinId;
+		private String activeType;
+		private String baseSeriesKey;
+
+		private TimeseriesWindow() {
+			dialog = new JDialog();
+			dialog.setModal(false);
+			dialog.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
+			dialog.setTitle("Vista grafico");
+			dialog.setLayout(new BorderLayout(8, 8));
+			dataset = new TimeSeriesCollection();
+			chart = ChartFactory.createTimeSeriesChart("Timeseries", "Tempo", "Valore", dataset, true, true, false);
+
+			JPanel controlsPanel = new JPanel(new GridBagLayout());
+			GridBagConstraints gbc = new GridBagConstraints();
+			gbc.insets = new Insets(4, 4, 4, 4);
+			gbc.fill = GridBagConstraints.HORIZONTAL;
+			gbc.weightx = 1;
+			gbc.gridx = 0;
+			gbc.gridy = 0;
+			tableCombo = new JComboBox<>();
+			basinCombo = new JComboBox<>();
+			streamGaugeCombo = new JComboBox<>();
+			controlsPanel.add(new JLabel("Tabella simulazione:"), gbc);
+			gbc.gridy++;
+			controlsPanel.add(tableCombo, gbc);
+			gbc.gridy++;
+			JButton addSimulationButton = new JButton("Carica simulazione");
+			addSimulationButton.addActionListener(e -> addSimulationSeries());
+			controlsPanel.add(addSimulationButton, gbc);
+			gbc.gridy++;
+			controlsPanel.add(new JLabel("Sottobacino:"), gbc);
+			gbc.gridy++;
+			controlsPanel.add(basinCombo, gbc);
+			gbc.gridy++;
+			JButton addBasinButton = new JButton("Carica sottobacino");
+			addBasinButton.addActionListener(e -> addSimulationSeries());
+			controlsPanel.add(addBasinButton, gbc);
+			gbc.gridy++;
+			if (config.mode() == ProjectMode.GEOPACKAGE) {
+				controlsPanel.add(new JLabel("Tabella stream gauge:"), gbc);
+				gbc.gridy++;
+				controlsPanel.add(streamGaugeCombo, gbc);
+				gbc.gridy++;
+				JButton addGaugeButton = new JButton("Carica stream gauge");
+				addGaugeButton.addActionListener(e -> addStreamGaugeSeries());
+				controlsPanel.add(addGaugeButton, gbc);
+				gbc.gridy++;
+			}
+			controlsPanel.add(new JLabel("Serie caricate:"), gbc);
+			gbc.gridy++;
+			loadedSeriesModel = new DefaultListModel<>();
+			loadedSeriesList = new JList<>(loadedSeriesModel);
+			loadedSeriesList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+			controlsPanel.add(new JScrollPane(loadedSeriesList), gbc);
+			gbc.gridy++;
+			JButton removeButton = new JButton("Rimuovi serie selezionata");
+			removeButton.addActionListener(e -> removeSelectedSeries());
+			controlsPanel.add(removeButton, gbc);
+			gbc.gridy++;
+
+			statusArea = new JTextArea();
+			statusArea.setEditable(false);
+			statusArea.setLineWrap(true);
+			statusArea.setWrapStyleWord(true);
+			JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, new ChartPanel(chart));
+			splitPane.setResizeWeight(0.30);
+			dialog.add(splitPane, BorderLayout.CENTER);
+			dialog.add(new JScrollPane(statusArea), BorderLayout.SOUTH);
+			dialog.setSize(new Dimension(1240, 700));
+			dialog.setLocationRelativeTo(SubbasinExplorerPanel.this);
+		}
+
+		private void showForSelection(String subbasinId, String firstTable, String type) {
+			this.activeSubbasinId = subbasinId;
+			this.activeType = type == null ? "discharge" : type;
+			dataset.removeAllSeries();
+			loadedSeries.clear();
+			loadedSeriesModel.clear();
+			baseSeriesKey = null;
+			reloadCombos();
+			if (subbasinId != null) basinCombo.setSelectedItem(subbasinId);
+			if (firstTable != null) tableCombo.setSelectedItem(firstTable);
+			dialog.setTitle("Vista " + activeType);
+			dialog.setVisible(true);
+			addBaseSeries();
+		}
+
+		private void reloadCombos() {
+			tableCombo.removeAllItems();
+			for (String table : loadAllTableNamesFromInputs()) tableCombo.addItem(table);
+			basinCombo.removeAllItems();
+			for (String id : loadBasinIds()) basinCombo.addItem(id);
+			streamGaugeCombo.removeAllItems();
+			if (config.mode() == ProjectMode.GEOPACKAGE && isSelectedSubbasinStreamGauge()) {
+				for (String table : loadAllTableNamesFromInputs()) streamGaugeCombo.addItem(table);
+			}
+		}
+
+		private void addBaseSeries() {
+			String table = (String) tableCombo.getSelectedItem();
+			String basinId = activeSubbasinId != null ? activeSubbasinId : (String) basinCombo.getSelectedItem();
+			if (table == null || basinId == null) {
+				statusArea.setText("Serie iniziale non caricata: selezione incompleta.");
+				return;
+			}
+			String key = key(table, basinId, "base");
+			TimeSeries series = new TimeSeries(table + " | basin " + basinId + " [iniziale]");
+			int count = fillSeriesFromAnyInput(table, basinId, series);
+			if (count <= 0) {
+				statusArea.setText("Serie iniziale non trovata in input.");
+				return;
+			}
+			baseSeriesKey = key;
+			addSeriesInternal(key, series, true);
+			statusArea.setText("Serie iniziale caricata (blu): " + table + " | basin " + basinId + " | punti: " + count);
+		}
+
+		private void addSimulationSeries() {
+			String table = (String) tableCombo.getSelectedItem();
+			String basinId = (String) basinCombo.getSelectedItem();
+			if (table == null || basinId == null) {
+				statusArea.setText("Seleziona simulazione e sottobacino.");
+				return;
+			}
+			String key = key(table, basinId, "sim");
+			if (loadedSeries.containsKey(key)) {
+				statusArea.setText("Serie già presente: " + table + " | basin " + basinId);
+				return;
+			}
+			TimeSeries series = new TimeSeries(table + " | basin " + basinId);
+			int count = fillSeriesFromAnyInput(table, basinId, series);
+			if (count <= 0) {
+				statusArea.setText("Nessun dato trovato per: " + table + " | basin " + basinId);
+				return;
+			}
+			addSeriesInternal(key, series, false);
+			statusArea.setText("Aggiunta serie simulazione: " + table + " | basin " + basinId + " | punti: " + count);
+		}
+
+		private void addStreamGaugeSeries() {
+			if (!(config.mode() == ProjectMode.GEOPACKAGE && isSelectedSubbasinStreamGauge())) {
+				statusArea.setText("Il sottobacino selezionato non è stream gauge.");
+				return;
+			}
+			String table = (String) streamGaugeCombo.getSelectedItem();
+			String basinId = (String) basinCombo.getSelectedItem();
+			if (table == null || basinId == null) {
+				statusArea.setText("Seleziona tabella stream gauge e sottobacino.");
+				return;
+			}
+			String key = key(table, basinId, "gauge");
+			if (loadedSeries.containsKey(key)) {
+				statusArea.setText("Serie stream gauge già presente.");
+				return;
+			}
+			TimeSeries series = new TimeSeries("stream gauge | " + table + " | basin " + basinId);
+			int count = fillSeriesFromAnyInput(table, basinId, series);
+			if (count <= 0) {
+				statusArea.setText("Nessun dato stream gauge trovato.");
+				return;
+			}
+			addSeriesInternal(key, series, false);
+			statusArea.setText("Aggiunta serie stream gauge: " + table + " | basin " + basinId + " | punti: " + count);
+		}
+
+		private void addSeriesInternal(String key, TimeSeries series, boolean isBase) {
+			loadedSeries.put(key, series);
+			dataset.addSeries(series);
+			loadedSeriesModel.addElement(key + (isBase ? " (base, non rimovibile)" : ""));
+			restyleSeries();
+		}
+
+		private void removeSelectedSeries() {
+			String selected = loadedSeriesList.getSelectedValue();
+			if (selected == null) {
+				statusArea.setText("Seleziona una serie da rimuovere.");
+				return;
+			}
+			String key = selected.replace(" (base, non rimovibile)", "");
+			if (baseSeriesKey != null && baseSeriesKey.equals(key)) {
+				statusArea.setText("La serie iniziale (blu) non può essere rimossa.");
+				return;
+			}
+			TimeSeries ts = loadedSeries.remove(key);
+			if (ts != null) {
+				dataset.removeSeries(ts);
+				loadedSeriesModel.removeElement(selected);
+				restyleSeries();
+				statusArea.setText("Serie rimossa: " + key);
+			}
+		}
+
+		private void restyleSeries() {
+			XYPlot plot = chart.getXYPlot();
+			XYLineAndShapeRenderer renderer;
+			if (plot.getRenderer() instanceof XYLineAndShapeRenderer) {
+				renderer = (XYLineAndShapeRenderer) plot.getRenderer();
+			} else {
+				renderer = new XYLineAndShapeRenderer(true, false);
+				plot.setRenderer(renderer);
+			}
+			for (int i = 0; i < dataset.getSeriesCount(); i++) {
+				Comparable<?> name = dataset.getSeriesKey(i);
+				if (name != null && baseSeriesKey != null && name.toString().contains("[iniziale]")) {
+					renderer.setSeriesPaint(i, Color.BLUE);
+				} else {
+					renderer.setSeriesPaint(i, null);
+				}
+			}
+		}
+
+		private String key(String table, String basinId, String type) {
+			return type + " | " + table + " | basin " + basinId;
+		}
+
+		private int fillSeriesFromAnyInput(String table, String basinId, TimeSeries series) {
+			int count = fillSeriesFromDb(config.geopackagePath(), table, basinId, series);
+			if (count > 0) return count;
+			return fillSeriesFromDb(config.sqlitePath(), table, basinId, series);
+		}
+
+		private int fillSeriesFromDb(java.nio.file.Path dbPath, String table, String basinId, TimeSeries series) {
+			if (dbPath == null) return 0;
+			String safeTable = table.replace("\"", "\"\"");
+			String sql = "SELECT ts, value FROM \"" + safeTable + "\" WHERE CAST(basin_id AS TEXT)=? ORDER BY ts";
+			try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
+					PreparedStatement ps = c.prepareStatement(sql)) {
+				ps.setString(1, basinId);
+				int count = 0;
+				try (ResultSet rs = ps.executeQuery()) {
+					while (rs.next()) {
+						long ts = rs.getLong("ts");
+						double value = rs.getDouble("value");
+						if (!rs.wasNull()) {
+							series.addOrUpdate(new Millisecond(new java.util.Date(ts)), value);
+							count++;
+						}
+					}
+				}
+				return count;
+			} catch (SQLException ex) {
+				return 0;
+			}
+		}
 	}
 
 	private void refreshSubbasinStyle() {
