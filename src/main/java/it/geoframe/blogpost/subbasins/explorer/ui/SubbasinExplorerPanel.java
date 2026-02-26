@@ -607,6 +607,9 @@ public final class SubbasinExplorerPanel extends JPanel {
 	private String extractSubbasinId(SimpleFeature feature) {
 		Object value = feature.getAttribute("basin_id");
 		if (value == null) {
+			value = feature.getAttribute("basinid");
+		}
+		if (value == null) {
 			value = feature.getAttribute("id");
 		}
 		if (value == null) {
