@@ -164,6 +164,29 @@ Default keys:
 - `tables.geopackage.network`
 - `tables.geopackage.topology.prefix`
 - `tables.geopackage.simulation.prefix`
+- `charts.state.aggregation.options`
+- `charts.state.aggregation.default`
+- `charts.fluxes.columns.*`
+- `charts.fluxes.labels.*`
+- `charts.fluxes.colors.*`
+- `charts.state.columns.*`
+- `charts.state.labels.*`
+- `charts.state.colors.*`
+
+### Chart parametrization
+
+You can customize state/fluxes charts directly from `explorer.properties` without changing code:
+
+- **Columns mapping**: remap expected database columns for state and fluxes (for example when schema names differ across projects).
+- **Series labels**: define plot legend labels shown in the UI.
+- **Series colors**: set colors in hex format (`#RRGGBB`).
+- **State aggregation**: define available aggregation buckets and default option.
+
+Examples:
+- `charts.fluxes.columns.melting_discharge=melting_discharge`
+- `charts.fluxes.colors.melting_discharge=#75C4FF`
+- `charts.state.labels.aet_sum=rootzone_aet + canopy_aet`
+- `charts.state.aggregation.options=1h,12h,24h,settimana,mese,anno`
 
 ---
 
