@@ -6,10 +6,12 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 

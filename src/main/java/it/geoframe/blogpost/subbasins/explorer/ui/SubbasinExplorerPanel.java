@@ -580,8 +580,6 @@ public final class SubbasinExplorerPanel extends JPanel {
 		if (value == null) {
 			value = feature.getAttribute("basinid");
 		}
-		
-		
 		if (value == null) {
 			value = feature.getAttribute("id");
 		}
