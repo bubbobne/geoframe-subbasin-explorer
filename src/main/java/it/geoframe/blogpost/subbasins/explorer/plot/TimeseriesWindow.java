@@ -60,6 +60,7 @@ import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 public final class TimeseriesWindow {
 	private static final String STREAM_GAUGE_PREFIX = "stream gauge";
 	private static final String DATE_FMT = "yyyy-MM-dd";
+
 	private record StatePoint(long timestamp, double sweDelta, double aetDelta, double canopyDelta, double rootzoneDelta,
 			double runoffDelta, double groundDelta) {
 	}
@@ -148,27 +149,6 @@ public final class TimeseriesWindow {
 		modeControlsContainer.add(buildStateControls(), "state");
 		modeControlsContainer.add(buildFluxesControls(), "fluxes");
 		controlsPanel.add(modeControlsContainer, gbc);
-		gbc.gridy++;
-		JButton panButton = new JButton("Pan ON/OFF");
-		panButton.addActionListener(e -> {
-			boolean next = !plot.isDomainPannable();
-			plot.setDomainPannable(next);
-			plot.setRangePannable(next);
-			appendLog("Pan " + (next ? "attivato" : "disattivato") + ".");
-		});
-		controlsPanel.add(panButton, gbc);
-		gbc.gridy++;
-		JButton zoomRectButton = new JButton("Zoom rettangolo ON/OFF");
-		zoomRectButton.addActionListener(e -> {
-			boolean next = !chartPanel.getFillZoomRectangle();
-			chartPanel.setFillZoomRectangle(next);
-			appendLog("Zoom rettangolo " + (next ? "attivato" : "disattivato") + ".");
-		});
-		controlsPanel.add(zoomRectButton, gbc);
-		gbc.gridy++;
-		JButton resetZoomButton = new JButton("Reset zoom");
-		resetZoomButton.addActionListener(e -> chartPanel.restoreAutoBounds());
-		controlsPanel.add(resetZoomButton, gbc);
 		gbc.gridy++;
 		controlsPanel.add(new JLabel("Linee nel grafico:"), gbc);
 		gbc.gridy++;
@@ -428,10 +408,22 @@ public final class TimeseriesWindow {
 			appendLog("Nessun dato state trovato in " + table + " per basin " + basinId + ".");
 			return;
 		}
-		List<StatePoint> deltas = computeStateDeltas(rows);
-		List<StatePoint> aggregated = aggregateStatePoints(deltas, (String) stateAggregationCombo.getSelectedItem());
+		StateSeriesCalculator.StateColumns stateColumns = new StateSeriesCalculator.StateColumns(
+				cfg("charts.state.columns.swe", "swe"), cfg("charts.state.columns.rootzone_aet", "rootzone_aet"),
+				cfg("charts.state.columns.canopy_aet", "canopy_aet"),
+				cfg("charts.state.columns.canopy_final", "canopy_final"),
+				cfg("charts.state.columns.canopy_initial", "canopy_initial"),
+				cfg("charts.state.columns.rootzone_final", "rootzone_final"),
+				cfg("charts.state.columns.rootzone_initial", "rootzone_initial"),
+				cfg("charts.state.columns.runoff_final", "runoff_final"),
+				cfg("charts.state.columns.runoff_initial", "runoff_initial"),
+				cfg("charts.state.columns.ground_final", "ground_final"),
+				cfg("charts.state.columns.ground_initial", "ground_initial"));
+		List<StateSeriesCalculator.StatePoint> deltas = StateSeriesCalculator.computeDeltas(rows, stateColumns);
+		List<StateSeriesCalculator.StatePoint> aggregated = StateSeriesCalculator.aggregate(deltas,
+				(String) stateAggregationCombo.getSelectedItem());
 		TimeTableXYDataset stateDataset = new TimeTableXYDataset();
-		for (StatePoint row : aggregated) {
+		for (StateSeriesCalculator.StatePoint row : aggregated) {
 			Date date = new Date(row.timestamp());
 			stateDataset.add(new Millisecond(date), row.sweDelta(), cfg("charts.state.labels.swe", "swe"));
 			stateDataset.add(new Millisecond(date), row.aetDelta(), cfg("charts.state.labels.aet_sum", "rootzone_aet + canopy_aet"));
@@ -454,25 +446,26 @@ public final class TimeseriesWindow {
 				+ stateAggregationCombo.getSelectedItem() + " | punti: " + aggregated.size());
 	}
 
-	private List<StatePoint> computeStateDeltas(List<TimeseriesLoader.TimeValueRow> rows) {
-		List<StatePoint> out = new ArrayList<>();
-		double previousSwe = Double.NaN;
-		String sweCol = cfg("charts.state.columns.swe", "swe");
-		String rootzoneAetCol = cfg("charts.state.columns.rootzone_aet", "rootzone_aet");
-		String canopyAetCol = cfg("charts.state.columns.canopy_aet", "canopy_aet");
-		String canopyFinalCol = cfg("charts.state.columns.canopy_final", "canopy_final");
-		String canopyInitialCol = cfg("charts.state.columns.canopy_initial", "canopy_initial");
-		String rootzoneFinalCol = cfg("charts.state.columns.rootzone_final", "rootzone_final");
-		String rootzoneInitialCol = cfg("charts.state.columns.rootzone_initial", "rootzone_initial");
-		String runoffFinalCol = cfg("charts.state.columns.runoff_final", "runoff_final");
-		String runoffInitialCol = cfg("charts.state.columns.runoff_initial", "runoff_initial");
-		String groundFinalCol = cfg("charts.state.columns.ground_final", "ground_final");
-		String groundInitialCol = cfg("charts.state.columns.ground_initial", "ground_initial");
+	private String cfg(String key, String defaultValue) {
+		return ExplorerConfig.chartOption(key, defaultValue);
+	}
+
+	private Color cfgColor(String key, String defaultHex) {
+		String raw = cfg(key, defaultHex);
+		try {
+			return Color.decode(raw.startsWith("#") ? raw : ("#" + raw));
+		} catch (NumberFormatException ex) {
+			return Color.decode(defaultHex);
+		}
+	}
+
+
+	private void addLineSeries(List<TimeseriesLoader.TimeValueRow> rows, String key, String label, Color color) {
+		TimeSeries series = new TimeSeries(label);
 		for (TimeseriesLoader.TimeValueRow row : rows) {
-			double swe = value(row, sweCol);
-			double sweDelta = Double.isFinite(previousSwe) && Double.isFinite(swe) ? swe - previousSwe : 0d;
-			if (Double.isFinite(swe)) {
-				previousSwe = swe;
+			double v = value(row, key);
+			if (Double.isFinite(v)) {
+				series.addOrUpdate(new Millisecond(new Date(row.timestamp())), v);
 			}
 			out.add(new StatePoint(row.timestamp(), sweDelta, value(row, rootzoneAetCol) + value(row, canopyAetCol),
 					value(row, canopyFinalCol) - value(row, canopyInitialCol),
@@ -480,6 +473,10 @@ public final class TimeseriesWindow {
 					value(row, runoffFinalCol) - value(row, runoffInitialCol),
 					value(row, groundFinalCol) - value(row, groundInitialCol)));
 		}
+		dataset.addSeries(series);
+		renderer.setSeriesPaint(dataset.getSeriesCount() - 1, color);
+	}
+
 		return out;
 	}
 
