@@ -602,6 +602,11 @@ public final class SubbasinExplorerPanel extends JPanel {
 	private String extractSubbasinId(SimpleFeature feature) {
 		Object value = feature.getAttribute("basin_id");
 		if (value == null) {
+			value = feature.getAttribute("basinid");
+		}
+		
+		
+		if (value == null) {
 			value = feature.getAttribute("id");
 		}
 		if (value == null) {
@@ -821,10 +826,11 @@ public final class SubbasinExplorerPanel extends JPanel {
 		private int fillSeriesFromDb(java.nio.file.Path dbPath, String table, String basinId, TimeSeries series) {
 			if (dbPath == null) return 0;
 			String safeTable = table.replace("\"", "\"\"");
-			String sql = "SELECT ts, value FROM \"" + safeTable + "\" WHERE CAST(basin_id AS TEXT)=? ORDER BY ts";
+			//@todo basiid!!!! 
+			String sql = "SELECT ts, value FROM \"" + safeTable + "\" WHERE basin_id=? ORDER BY ts";
 			try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
 					PreparedStatement ps = c.prepareStatement(sql)) {
-				ps.setString(1, basinId);
+				ps.setInt(1, Integer.valueOf(basinId));
 				int count = 0;
 				try (ResultSet rs = ps.executeQuery()) {
 					while (rs.next()) {
