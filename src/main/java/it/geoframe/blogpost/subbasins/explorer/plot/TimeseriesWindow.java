@@ -7,10 +7,14 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -20,10 +24,12 @@ import javax.swing.DefaultListModel;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.WindowConstants;
 
@@ -34,12 +40,16 @@ import org.jfree.chart.plot.XYPlot;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
 import org.jfree.data.time.TimeSeries;
 import org.jfree.data.time.TimeSeriesCollection;
+import org.jfree.data.time.TimeSeriesDataItem;
 
 import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesLoader;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 
 public final class TimeseriesWindow {
+	private static final String STREAM_GAUGE_PREFIX = "stream gauge";
+	private static final String DATE_FMT = "yyyy-MM-dd";
+
 	private final ProjectConfig config;
 	private final TimeseriesLoader loader;
 	private final Supplier<List<String>> tableSupplier;
@@ -109,6 +119,10 @@ public final class TimeseriesWindow {
 		addGaugeButton.addActionListener(e -> addSelectedSeriesFromGaugeCombo());
 		controlsPanel.add(addGaugeButton, gbc);
 		gbc.gridy++;
+		JButton metricsButton = new JButton("Calcola metriche (KGE, NSE, NSElog)");
+		metricsButton.addActionListener(e -> showMetricsPopup());
+		controlsPanel.add(metricsButton, gbc);
+		gbc.gridy++;
 		controlsPanel.add(new JLabel("Linee nel grafico:"), gbc);
 		gbc.gridy++;
 		controlsPanel.add(new JScrollPane(seriesList), gbc);
@@ -121,11 +135,20 @@ public final class TimeseriesWindow {
 		statusArea.setEditable(false);
 		statusArea.setLineWrap(true);
 		statusArea.setWrapStyleWord(true);
-		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, new ChartPanel(chart));
-		splitPane.setResizeWeight(0.3);
+		statusArea.setBackground(new Color(15, 18, 22));
+		statusArea.setForeground(new Color(134, 239, 172));
+		statusArea.setCaretColor(new Color(134, 239, 172));
+		statusArea.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
+		JScrollPane consoleScroll = new JScrollPane(statusArea);
+		consoleScroll.setPreferredSize(new Dimension(1000, 220));
+
+		JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new ChartPanel(chart), consoleScroll);
+		rightSplit.setResizeWeight(0.68);
+		rightSplit.setContinuousLayout(true);
+		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, rightSplit);
+		splitPane.setResizeWeight(0.27);
 		dialog.add(splitPane, BorderLayout.CENTER);
-		dialog.add(new JScrollPane(statusArea), BorderLayout.SOUTH);
-		dialog.setSize(new Dimension(1180, 680));
+		dialog.setSize(new Dimension(1240, 760));
 		dialog.setLocationRelativeTo(parent);
 	}
 
@@ -143,6 +166,7 @@ public final class TimeseriesWindow {
 		}
 		dialog.setTitle("Vista " + activeType);
 		dialog.setVisible(true);
+		appendLog("Aperta vista portate per sottobacino " + String.valueOf(subbasinId) + ".");
 		addSelectedSeriesFromSimulationCombo();
 	}
 
@@ -230,7 +254,7 @@ public final class TimeseriesWindow {
 
 	private void addSelectedSeriesFromGaugeCombo() {
 		if (config.mode() != ProjectMode.GEOPACKAGE || !streamGaugeSelectionSupplier.getAsBoolean()) {
-			statusArea.setText("Stream gauge non disponibile per la selezione corrente.");
+			appendLog("Stream gauge non disponibile per la selezione corrente.");
 			return;
 		}
 		String table = (String) streamGaugeCombo.getSelectedItem();
@@ -240,20 +264,20 @@ public final class TimeseriesWindow {
 	private void addSeries(String table, boolean isGaugeSeries) {
 		String basinId = (String) basinCombo.getSelectedItem();
 		if (table == null || basinId == null) {
-			statusArea.setText("Seleziona tabella e sottobacino.");
+			appendLog("Seleziona tabella e sottobacino.");
 			return;
 		}
-		String labelPrefix = isGaugeSeries ? "stream gauge" : table;
+		String labelPrefix = isGaugeSeries ? STREAM_GAUGE_PREFIX : table;
 		TimeSeries series = new TimeSeries(labelPrefix + " | basin " + basinId);
 		int count = loader.fillSeriesFromAnyInput(config, table, basinId, series);
 		if (count <= 0) {
-			statusArea.setText("Nessun dato trovato per tabella " + table + " e basin " + basinId + ".");
+			appendLog("Nessun dato trovato per tabella " + table + " e basin " + basinId + ".");
 			return;
 		}
 		dataset.addSeries(series);
 		applySeriesStyles();
 		reloadSeriesList();
-		statusArea.setText("Aggiunta serie: " + table + "\nBasin ID: " + basinId + "\nPunti: " + count);
+		appendLog("Aggiunta serie: " + table + " | basin " + basinId + " | punti: " + count);
 	}
 
 	private void applySeriesStyles() {
@@ -279,22 +303,315 @@ public final class TimeseriesWindow {
 
 	private void removeSelectedSeries() {
 		if (dataset.getSeriesCount() == 0) {
-			statusArea.setText("Non ci sono linee da eliminare.");
+			appendLog("Non ci sono linee da eliminare.");
 			return;
 		}
 		int selectedIndex = seriesList.getSelectedIndex();
 		if (selectedIndex < 0 || selectedIndex >= dataset.getSeriesCount()) {
-			statusArea.setText("Seleziona una linea dalla lista e premi cancella.");
+			appendLog("Seleziona una linea dalla lista e premi cancella.");
 			return;
 		}
 		if (selectedIndex == 0) {
-			statusArea.setText("La portata base non può essere eliminata.");
+			appendLog("La portata base non può essere eliminata.");
 			return;
 		}
 		String removedKey = dataset.getSeries(selectedIndex).getKey().toString();
 		dataset.removeSeries(selectedIndex);
 		applySeriesStyles();
 		reloadSeriesList();
-		statusArea.setText("Linea eliminata: " + removedKey);
+		appendLog("Linea eliminata: " + removedKey);
+	}
+
+	private void showMetricsPopup() {
+		List<TimeSeries> simulationSeries = getSimulationSeries();
+		List<TimeSeries> gaugeSeries = getGaugeSeries();
+		if (simulationSeries.isEmpty()) {
+			appendLog("Metriche: caricare almeno una serie simulata.");
+			return;
+		}
+		if (gaugeSeries.isEmpty()) {
+			appendLog("Metriche: caricare almeno una serie stream gauge.");
+			return;
+		}
+
+		JComboBox<String> simCombo = new JComboBox<>(seriesKeys(simulationSeries));
+		JComboBox<String> gaugeCombo = new JComboBox<>(seriesKeys(gaugeSeries));
+		JTextField fromField = new JTextField();
+		JTextField toField = new JTextField();
+		long[] range = computeDateRange();
+		SimpleDateFormat fmt = buildDateFormatter();
+		if (range[0] > 0) {
+			fromField.setText(fmt.format(new Date(range[0])));
+		}
+		if (range[1] > 0) {
+			toField.setText(fmt.format(new Date(range[1])));
+		}
+
+		JPanel panel = new JPanel(new GridBagLayout());
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.insets = new Insets(4, 4, 4, 4);
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+		gbc.weightx = 1;
+		gbc.gridx = 0;
+		gbc.gridy = 0;
+		panel.add(new JLabel("Serie simulata:"), gbc);
+		gbc.gridy++;
+		panel.add(simCombo, gbc);
+		gbc.gridy++;
+		panel.add(new JLabel("Stream gauge:"), gbc);
+		gbc.gridy++;
+		panel.add(gaugeCombo, gbc);
+		gbc.gridy++;
+		panel.add(new JLabel("Data inizio (yyyy-MM-dd, opzionale):"), gbc);
+		gbc.gridy++;
+		panel.add(fromField, gbc);
+		gbc.gridy++;
+		panel.add(new JLabel("Data fine (yyyy-MM-dd, opzionale):"), gbc);
+		gbc.gridy++;
+		panel.add(toField, gbc);
+
+		int choice = JOptionPane.showConfirmDialog(dialog, panel, "Calcolo metriche", JOptionPane.OK_CANCEL_OPTION,
+				JOptionPane.PLAIN_MESSAGE);
+		if (choice != JOptionPane.OK_OPTION) {
+			return;
+		}
+
+		Long from = parseDateOrNull(fromField.getText());
+		Long to = parseDateOrNull(toField.getText());
+		if (from == null && !fromField.getText().isBlank()) {
+			appendLog("Formato data inizio non valido. Usa yyyy-MM-dd.");
+			return;
+		}
+		if (to == null && !toField.getText().isBlank()) {
+			appendLog("Formato data fine non valido. Usa yyyy-MM-dd.");
+			return;
+		}
+		if (from != null && to != null && from > to) {
+			appendLog("Intervallo non valido: data inizio > data fine.");
+			return;
+		}
+
+		TimeSeries sim = findSeriesByKey((String) simCombo.getSelectedItem());
+		TimeSeries gauge = findSeriesByKey((String) gaugeCombo.getSelectedItem());
+		if (sim == null || gauge == null) {
+			appendLog("Impossibile trovare le serie selezionate per il calcolo metriche.");
+			return;
+		}
+
+		double[] metrics = computeMetrics(sim, gauge, from, to);
+		if (Double.isNaN(metrics[0])) {
+			appendLog("Metriche non calcolabili: servono dati in comune nel periodo selezionato.");
+			return;
+		}
+		appendLog(String.format(Locale.ROOT,
+				"Metriche [%s vs %s] -> KGE=%.4f, NSE=%.4f, NSElog=%.4f", sim.getKey(), gauge.getKey(), metrics[0],
+				metrics[1], metrics[2]));
+	}
+
+	private double[] computeMetrics(TimeSeries simulated, TimeSeries observed, Long from, Long to) {
+		List<Double> simValues = new ArrayList<>();
+		List<Double> obsValues = new ArrayList<>();
+		for (int i = 0; i < observed.getItemCount(); i++) {
+			TimeSeriesDataItem obsItem = observed.getDataItem(i);
+			long t = obsItem.getPeriod().getStart().getTime();
+			if (from != null && t < from) {
+				continue;
+			}
+			if (to != null && t > to) {
+				continue;
+			}
+			Number simN = simulated.getValue(obsItem.getPeriod());
+			if (simN == null || obsItem.getValue() == null) {
+				continue;
+			}
+			double sim = simN.doubleValue();
+			double obs = obsItem.getValue().doubleValue();
+			if (Double.isFinite(sim) && Double.isFinite(obs)) {
+				simValues.add(sim);
+				obsValues.add(obs);
+			}
+		}
+		if (simValues.size() < 2) {
+			return new double[] { Double.NaN, Double.NaN, Double.NaN };
+		}
+
+		double meanObs = mean(obsValues);
+		double meanSim = mean(simValues);
+		double nseNum = 0d;
+		double nseDen = 0d;
+		for (int i = 0; i < simValues.size(); i++) {
+			double s = simValues.get(i);
+			double o = obsValues.get(i);
+			nseNum += (s - o) * (s - o);
+			nseDen += (o - meanObs) * (o - meanObs);
+		}
+		double nse = nseDen == 0d ? Double.NaN : 1d - (nseNum / nseDen);
+
+		List<Double> simLog = new ArrayList<>();
+		List<Double> obsLog = new ArrayList<>();
+		for (int i = 0; i < simValues.size(); i++) {
+			double s = simValues.get(i);
+			double o = obsValues.get(i);
+			if (s > 0d && o > 0d) {
+				simLog.add(Math.log(s));
+				obsLog.add(Math.log(o));
+			}
+		}
+		double nseLog = Double.NaN;
+		if (simLog.size() >= 2) {
+			double meanObsLog = mean(obsLog);
+			double num = 0d;
+			double den = 0d;
+			for (int i = 0; i < simLog.size(); i++) {
+				double s = simLog.get(i);
+				double o = obsLog.get(i);
+				num += (s - o) * (s - o);
+				den += (o - meanObsLog) * (o - meanObsLog);
+			}
+			nseLog = den == 0d ? Double.NaN : 1d - (num / den);
+		}
+
+		double r = correlation(simValues, obsValues);
+		double stdSim = stddev(simValues, meanSim);
+		double stdObs = stddev(obsValues, meanObs);
+		double alpha = stdObs == 0d ? Double.NaN : stdSim / stdObs;
+		double beta = meanObs == 0d ? Double.NaN : meanSim / meanObs;
+		double kge = Double.isNaN(r) || Double.isNaN(alpha) || Double.isNaN(beta) ? Double.NaN
+				: 1d - Math.sqrt((r - 1d) * (r - 1d) + (alpha - 1d) * (alpha - 1d) + (beta - 1d) * (beta - 1d));
+
+		return new double[] { kge, nse, nseLog };
+	}
+
+	private double mean(List<Double> values) {
+		double sum = 0d;
+		for (double v : values) {
+			sum += v;
+		}
+		return sum / values.size();
+	}
+
+	private double stddev(List<Double> values, double mean) {
+		if (values.size() < 2) {
+			return Double.NaN;
+		}
+		double sum = 0d;
+		for (double v : values) {
+			double d = v - mean;
+			sum += d * d;
+		}
+		return Math.sqrt(sum / (values.size() - 1));
+	}
+
+	private double correlation(List<Double> x, List<Double> y) {
+		if (x.size() != y.size() || x.size() < 2) {
+			return Double.NaN;
+		}
+		double meanX = mean(x);
+		double meanY = mean(y);
+		double num = 0d;
+		double denX = 0d;
+		double denY = 0d;
+		for (int i = 0; i < x.size(); i++) {
+			double dx = x.get(i) - meanX;
+			double dy = y.get(i) - meanY;
+			num += dx * dy;
+			denX += dx * dx;
+			denY += dy * dy;
+		}
+		if (denX == 0d || denY == 0d) {
+			return Double.NaN;
+		}
+		return num / Math.sqrt(denX * denY);
+	}
+
+	private List<TimeSeries> getSimulationSeries() {
+		List<TimeSeries> out = new ArrayList<>();
+		for (int i = 0; i < dataset.getSeriesCount(); i++) {
+			TimeSeries s = dataset.getSeries(i);
+			if (!isGaugeSeries(s)) {
+				out.add(s);
+			}
+		}
+		return out;
+	}
+
+	private List<TimeSeries> getGaugeSeries() {
+		List<TimeSeries> out = new ArrayList<>();
+		for (int i = 0; i < dataset.getSeriesCount(); i++) {
+			TimeSeries s = dataset.getSeries(i);
+			if (isGaugeSeries(s)) {
+				out.add(s);
+			}
+		}
+		return out;
+	}
+
+	private boolean isGaugeSeries(TimeSeries series) {
+		return series != null && series.getKey().toString().toLowerCase(Locale.ROOT).startsWith(STREAM_GAUGE_PREFIX);
+	}
+
+	private String[] seriesKeys(List<TimeSeries> series) {
+		String[] out = new String[series.size()];
+		for (int i = 0; i < series.size(); i++) {
+			out[i] = series.get(i).getKey().toString();
+		}
+		return out;
+	}
+
+	private TimeSeries findSeriesByKey(String key) {
+		if (key == null) {
+			return null;
+		}
+		for (int i = 0; i < dataset.getSeriesCount(); i++) {
+			TimeSeries s = dataset.getSeries(i);
+			if (key.equals(s.getKey().toString())) {
+				return s;
+			}
+		}
+		return null;
+	}
+
+	private Long parseDateOrNull(String text) {
+		if (text == null || text.isBlank()) {
+			return null;
+		}
+		try {
+			SimpleDateFormat fmt = buildDateFormatter();
+			Date date = fmt.parse(text.trim());
+			return date == null ? null : date.getTime();
+		} catch (ParseException e) {
+			return null;
+		}
+	}
+
+	private SimpleDateFormat buildDateFormatter() {
+		SimpleDateFormat fmt = new SimpleDateFormat(DATE_FMT, Locale.ROOT);
+		fmt.setLenient(false);
+		fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+		return fmt;
+	}
+
+	private long[] computeDateRange() {
+		long min = Long.MAX_VALUE;
+		long max = Long.MIN_VALUE;
+		for (int i = 0; i < dataset.getSeriesCount(); i++) {
+			TimeSeries s = dataset.getSeries(i);
+			if (s.getItemCount() == 0) {
+				continue;
+			}
+			long sMin = s.getDataItem(0).getPeriod().getStart().getTime();
+			long sMax = s.getDataItem(s.getItemCount() - 1).getPeriod().getStart().getTime();
+			min = Math.min(min, sMin);
+			max = Math.max(max, sMax);
+		}
+		if (min == Long.MAX_VALUE || max == Long.MIN_VALUE) {
+			return new long[] { -1, -1 };
+		}
+		return new long[] { min, max };
+	}
+
+	private void appendLog(String message) {
+		statusArea.append("$ " + message + "\n");
+		statusArea.setCaretPosition(statusArea.getDocument().getLength());
 	}
 }
