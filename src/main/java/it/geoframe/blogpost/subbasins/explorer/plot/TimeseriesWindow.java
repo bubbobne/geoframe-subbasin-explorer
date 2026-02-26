@@ -1,6 +1,7 @@
 package it.geoframe.blogpost.subbasins.explorer.plot;
 
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -10,6 +11,7 @@ import java.awt.Insets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -18,9 +20,9 @@ import java.util.TimeZone;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.DefaultListModel;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -37,19 +39,22 @@ import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
 import org.jfree.chart.plot.XYPlot;
+import org.jfree.chart.renderer.xy.StackedXYAreaRenderer2;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
+import org.jfree.data.time.Millisecond;
 import org.jfree.data.time.TimeSeries;
 import org.jfree.data.time.TimeSeriesCollection;
 import org.jfree.data.time.TimeSeriesDataItem;
+import org.jfree.data.time.TimeTableXYDataset;
 
 import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesLoader;
+import it.geoframe.blogpost.subbasins.explorer.services.ExplorerConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 
 public final class TimeseriesWindow {
 	private static final String STREAM_GAUGE_PREFIX = "stream gauge";
 	private static final String DATE_FMT = "yyyy-MM-dd";
-
 	private final ProjectConfig config;
 	private final TimeseriesLoader loader;
 	private final Supplier<List<String>> tableSupplier;
@@ -59,12 +64,19 @@ public final class TimeseriesWindow {
 	private final JComboBox<String> simulationTableCombo;
 	private final JComboBox<String> basinCombo;
 	private final JComboBox<String> streamGaugeCombo;
+	private final JComboBox<String> stateAggregationCombo;
 	private final JList<String> seriesList;
 	private final JTextArea statusArea;
 	private final TimeSeriesCollection dataset;
 	private String activeType;
 	private String baseSeriesKey;
 	private final XYLineAndShapeRenderer renderer;
+	private final StackedXYAreaRenderer2 stackedRenderer;
+	private final XYPlot plot;
+	private final CardLayout modeControlsLayout;
+	private final JPanel modeControlsContainer;
+	private final ChartPanel chartPanel;
+	private final JTextField commandField;
 
 	public TimeseriesWindow(Component parent, ProjectConfig config, TimeseriesLoader loader,
 			Supplier<List<String>> tableSupplier, Supplier<List<String>> basinSupplier,
@@ -82,9 +94,13 @@ public final class TimeseriesWindow {
 		dataset = new TimeSeriesCollection();
 		JFreeChart chart = ChartFactory.createTimeSeriesChart("Timeseries", "Tempo", "Valore", dataset, true, true,
 				false);
-		XYPlot plot = chart.getXYPlot();
+		plot = chart.getXYPlot();
 		renderer = new XYLineAndShapeRenderer(true, false);
+		stackedRenderer = new StackedXYAreaRenderer2();
 		plot.setRenderer(renderer);
+		plot.setDomainPannable(true);
+		plot.setRangePannable(true);
+
 		JPanel controlsPanel = new JPanel(new GridBagLayout());
 		GridBagConstraints gbc = new GridBagConstraints();
 		gbc.insets = new Insets(4, 4, 4, 4);
@@ -95,6 +111,13 @@ public final class TimeseriesWindow {
 		simulationTableCombo = new JComboBox<>();
 		basinCombo = new JComboBox<>();
 		streamGaugeCombo = new JComboBox<>();
+		stateAggregationCombo = new JComboBox<>(ExplorerConfig.stateAggregationOptions());
+		stateAggregationCombo.setSelectedItem(ExplorerConfig.stateAggregationDefault());
+		stateAggregationCombo.addActionListener(e -> {
+			if ("state".equalsIgnoreCase(activeType)) {
+				addSelectedSeriesFromSimulationCombo();
+			}
+		});
 		seriesList = new JList<>(new DefaultListModel<>());
 		seriesList.setVisibleRowCount(6);
 		seriesList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -111,17 +134,13 @@ public final class TimeseriesWindow {
 		addSimulationButton.addActionListener(e -> addSelectedSeriesFromSimulationCombo());
 		controlsPanel.add(addSimulationButton, gbc);
 		gbc.gridy++;
-		controlsPanel.add(new JLabel("Stream gauge:"), gbc);
-		gbc.gridy++;
-		controlsPanel.add(streamGaugeCombo, gbc);
-		gbc.gridy++;
-		JButton addGaugeButton = new JButton("Carica stream gauge");
-		addGaugeButton.addActionListener(e -> addSelectedSeriesFromGaugeCombo());
-		controlsPanel.add(addGaugeButton, gbc);
-		gbc.gridy++;
-		JButton metricsButton = new JButton("Calcola metriche (KGE, NSE, NSElog)");
-		metricsButton.addActionListener(e -> showMetricsPopup());
-		controlsPanel.add(metricsButton, gbc);
+
+		modeControlsLayout = new CardLayout();
+		modeControlsContainer = new JPanel(modeControlsLayout);
+		modeControlsContainer.add(buildDischargeControls(), "discharge");
+		modeControlsContainer.add(buildStateControls(), "state");
+		modeControlsContainer.add(buildFluxesControls(), "fluxes");
+		controlsPanel.add(modeControlsContainer, gbc);
 		gbc.gridy++;
 		controlsPanel.add(new JLabel("Linee nel grafico:"), gbc);
 		gbc.gridy++;
@@ -142,7 +161,21 @@ public final class TimeseriesWindow {
 		JScrollPane consoleScroll = new JScrollPane(statusArea);
 		consoleScroll.setPreferredSize(new Dimension(1000, 220));
 
-		JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new ChartPanel(chart), consoleScroll);
+		chartPanel = new ChartPanel(chart);
+		chartPanel.setMouseWheelEnabled(true);
+		chartPanel.setMouseZoomable(true, false);
+		JPanel consolePanel = new JPanel(new BorderLayout(4, 4));
+		consolePanel.add(consoleScroll, BorderLayout.CENTER);
+		commandField = new JTextField();
+		commandField.addActionListener(e -> executeConsoleCommand(commandField.getText()));
+		JButton runCommandButton = new JButton("Esegui");
+		runCommandButton.addActionListener(e -> executeConsoleCommand(commandField.getText()));
+		JPanel cmdRow = new JPanel(new BorderLayout(4, 4));
+		cmdRow.add(new JLabel(">"), BorderLayout.WEST);
+		cmdRow.add(commandField, BorderLayout.CENTER);
+		cmdRow.add(runCommandButton, BorderLayout.EAST);
+		consolePanel.add(cmdRow, BorderLayout.SOUTH);
+		JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chartPanel, consolePanel);
 		rightSplit.setResizeWeight(0.68);
 		rightSplit.setContinuousLayout(true);
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, rightSplit);
@@ -158,16 +191,70 @@ public final class TimeseriesWindow {
 		baseSeriesKey = null;
 		reloadSeriesList();
 		reloadCombos();
+		showModeControls();
 		if (subbasinId != null) {
 			basinCombo.setSelectedItem(subbasinId);
 		}
 		if (firstTable != null) {
 			simulationTableCombo.setSelectedItem(firstTable);
 		}
+		plot.setDataset(dataset);
+		plot.setRenderer(renderer);
 		dialog.setTitle("Vista " + activeType);
 		dialog.setVisible(true);
-		appendLog("Aperta vista portate per sottobacino " + String.valueOf(subbasinId) + ".");
+		appendLog("Aperta vista " + activeType + " per sottobacino " + String.valueOf(subbasinId) + ".");
+		appendLog("Console pronta. Digita help per i comandi.");
 		addSelectedSeriesFromSimulationCombo();
+	}
+
+	private JPanel buildDischargeControls() {
+		JPanel panel = new JPanel(new GridBagLayout());
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.insets = new Insets(2, 0, 2, 0);
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+		gbc.weightx = 1;
+		gbc.gridx = 0;
+		gbc.gridy = 0;
+		panel.add(new JLabel("Stream gauge:"), gbc);
+		gbc.gridy++;
+		panel.add(streamGaugeCombo, gbc);
+		gbc.gridy++;
+		JButton addGaugeButton = new JButton("Carica stream gauge");
+		addGaugeButton.addActionListener(e -> addSelectedSeriesFromGaugeCombo());
+		panel.add(addGaugeButton, gbc);
+		gbc.gridy++;
+		JButton metricsButton = new JButton("Calcola metriche (KGE, NSE, NSElog)");
+		metricsButton.addActionListener(e -> showMetricsPopup());
+		panel.add(metricsButton, gbc);
+		return panel;
+	}
+
+	private JPanel buildStateControls() {
+		JPanel panel = new JPanel(new GridBagLayout());
+		GridBagConstraints gbc = new GridBagConstraints();
+		gbc.insets = new Insets(2, 0, 2, 0);
+		gbc.fill = GridBagConstraints.HORIZONTAL;
+		gbc.weightx = 1;
+		gbc.gridx = 0;
+		gbc.gridy = 0;
+		panel.add(new JLabel("Aggregazione stati:"), gbc);
+		gbc.gridy++;
+		panel.add(stateAggregationCombo, gbc);
+		return panel;
+	}
+
+	private JPanel buildFluxesControls() {
+		JPanel panel = new JPanel(new BorderLayout());
+		panel.add(new JLabel("Fluxes: serie fisse senza controlli aggiuntivi."), BorderLayout.CENTER);
+		return panel;
+	}
+
+	private void showModeControls() {
+		String mode = activeType == null ? "discharge" : activeType.toLowerCase(Locale.ROOT);
+		if (!"discharge".equals(mode) && !"state".equals(mode) && !"fluxes".equals(mode)) {
+			mode = "discharge";
+		}
+		modeControlsLayout.show(modeControlsContainer, mode);
 	}
 
 	private void reloadCombos() {
@@ -193,7 +280,16 @@ public final class TimeseriesWindow {
 		}
 		List<String> filtered = new ArrayList<>();
 		for (String table : sourceTables) {
-			if (table != null && containsAny(table, "discharge", "sim", activeType)) {
+			if (table == null) {
+				continue;
+			}
+			String lower = table.toLowerCase(Locale.ROOT);
+			boolean isDischarge = lower.contains("discharge");
+			if ("discharge".equalsIgnoreCase(activeType) && isDischarge) {
+				filtered.add(table);
+			}
+			if (("state".equalsIgnoreCase(activeType) || "fluxes".equalsIgnoreCase(activeType)) && lower.contains("sim")
+					&& !isDischarge) {
 				filtered.add(table);
 			}
 		}
@@ -234,22 +330,179 @@ public final class TimeseriesWindow {
 		return false;
 	}
 
-	private boolean containsAny(String table, String... tokens) {
-		if (table == null || tokens == null) {
-			return false;
-		}
-		String normalized = table.toLowerCase(Locale.ROOT);
-		for (String token : tokens) {
-			if (token != null && !token.isBlank() && normalized.contains(token.toLowerCase(Locale.ROOT))) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	private void addSelectedSeriesFromSimulationCombo() {
 		String table = (String) simulationTableCombo.getSelectedItem();
+		if ("fluxes".equalsIgnoreCase(activeType)) {
+			addFluxesSeries(table);
+			return;
+		}
+		if ("state".equalsIgnoreCase(activeType)) {
+			addStateSeries(table);
+			return;
+		}
 		addSeries(table, false);
+	}
+
+	private void addFluxesSeries(String table) {
+		String basinId = (String) basinCombo.getSelectedItem();
+		if (table == null || basinId == null) {
+			appendLog("Seleziona tabella e sottobacino.");
+			return;
+		}
+		dataset.removeAllSeries();
+		baseSeriesKey = null;
+		List<TimeseriesLoader.TimeValueRow> rows = loader.loadRowsFromAnyInput(config, table, basinId,
+				cfg("charts.fluxes.columns.melting_discharge", "melting_discharge"),
+				cfg("charts.fluxes.columns.canopy_throughfall", "canopy_throughfall"),
+				cfg("charts.fluxes.columns.canopy_aet", "canopy_aet"),
+				cfg("charts.fluxes.columns.rootzone_aet", "rootzone_aet"),
+				cfg("charts.fluxes.columns.root_zone_recharge", "root_zone_recharge"),
+				cfg("charts.fluxes.columns.ground_discharge", "ground_discharge"),
+				cfg("charts.fluxes.columns.runoff_discharge", "runoff_discharge"),
+				cfg("charts.fluxes.columns.rootzone_quick", "rootzone_quick"));
+		if (rows.isEmpty()) {
+			appendLog("Nessun dato fluxes trovato in " + table + " per basin " + basinId + ".");
+			return;
+		}
+		String meltCol = cfg("charts.fluxes.columns.melting_discharge", "melting_discharge");
+		String throughCol = cfg("charts.fluxes.columns.canopy_throughfall", "canopy_throughfall");
+		String canopyAetCol = cfg("charts.fluxes.columns.canopy_aet", "canopy_aet");
+		String rootAetCol = cfg("charts.fluxes.columns.rootzone_aet", "rootzone_aet");
+		String rechargeCol = cfg("charts.fluxes.columns.root_zone_recharge", "root_zone_recharge");
+		String groundCol = cfg("charts.fluxes.columns.ground_discharge", "ground_discharge");
+		String runoffCol = cfg("charts.fluxes.columns.runoff_discharge", "runoff_discharge");
+		String quickCol = cfg("charts.fluxes.columns.rootzone_quick", "rootzone_quick");
+		addLineSeries(rows, meltCol, cfg("charts.fluxes.labels.melting_discharge", "melting_discharg"),
+				cfgColor("charts.fluxes.colors.melting_discharge", "#75C4FF"));
+		addLineSeries(rows, throughCol, cfg("charts.fluxes.labels.canopy_throughfall", "canopy_throughfall"),
+				cfgColor("charts.fluxes.colors.canopy_throughfall", "#22C55E"));
+		addSummedLineSeries(rows, cfg("charts.fluxes.labels.aet_sum", "canopy_aet + rootzone_aet"),
+				new String[] { canopyAetCol, rootAetCol }, cfgColor("charts.fluxes.colors.aet_sum", "#F97316"));
+		addLineSeries(rows, rechargeCol, cfg("charts.fluxes.labels.root_zone_recharge", "root_zone_recharge"),
+				cfgColor("charts.fluxes.colors.root_zone_recharge", "#784820"));
+		addLineSeries(rows, groundCol, cfg("charts.fluxes.labels.ground_discharge", "ground_discharge"),
+				cfgColor("charts.fluxes.colors.ground_discharge", "#808080"));
+		addLineSeries(rows, runoffCol, cfg("charts.fluxes.labels.runoff_discharge", "runoff_discharge"),
+				cfgColor("charts.fluxes.colors.runoff_discharge", "#0000FF"));
+		addLineSeries(rows, quickCol, cfg("charts.fluxes.labels.rootzone_quick", "rootzone_quick"),
+				cfgColor("charts.fluxes.colors.rootzone_quick", "#4F46E5"));
+		reloadSeriesList();
+		appendLog("Caricate serie fluxes da " + table + " | basin " + basinId + " | punti: " + rows.size());
+	}
+
+	private void addStateSeries(String table) {
+		String basinId = (String) basinCombo.getSelectedItem();
+		if (table == null || basinId == null) {
+			appendLog("Seleziona tabella e sottobacino.");
+			return;
+		}
+		List<TimeseriesLoader.TimeValueRow> rows = loader.loadRowsFromAnyInput(config, table, basinId,
+				cfg("charts.state.columns.swe", "swe"),
+				cfg("charts.state.columns.rootzone_aet", "rootzone_aet"),
+				cfg("charts.state.columns.canopy_aet", "canopy_aet"),
+				cfg("charts.state.columns.canopy_final", "canopy_final"),
+				cfg("charts.state.columns.canopy_initial", "canopy_initial"),
+				cfg("charts.state.columns.rootzone_final", "rootzone_final"),
+				cfg("charts.state.columns.rootzone_initial", "rootzone_initial"),
+				cfg("charts.state.columns.runoff_final", "runoff_final"),
+				cfg("charts.state.columns.runoff_initial", "runoff_initial"),
+				cfg("charts.state.columns.ground_final", "ground_final"),
+				cfg("charts.state.columns.ground_initial", "ground_initial"));
+		if (rows.isEmpty()) {
+			appendLog("Nessun dato state trovato in " + table + " per basin " + basinId + ".");
+			return;
+		}
+		StateSeriesCalculator.StateColumns stateColumns = new StateSeriesCalculator.StateColumns(
+				cfg("charts.state.columns.swe", "swe"), cfg("charts.state.columns.rootzone_aet", "rootzone_aet"),
+				cfg("charts.state.columns.canopy_aet", "canopy_aet"),
+				cfg("charts.state.columns.canopy_final", "canopy_final"),
+				cfg("charts.state.columns.canopy_initial", "canopy_initial"),
+				cfg("charts.state.columns.rootzone_final", "rootzone_final"),
+				cfg("charts.state.columns.rootzone_initial", "rootzone_initial"),
+				cfg("charts.state.columns.runoff_final", "runoff_final"),
+				cfg("charts.state.columns.runoff_initial", "runoff_initial"),
+				cfg("charts.state.columns.ground_final", "ground_final"),
+				cfg("charts.state.columns.ground_initial", "ground_initial"));
+		List<StateSeriesCalculator.StatePoint> deltas = StateSeriesCalculator.computeDeltas(rows, stateColumns);
+		List<StateSeriesCalculator.StatePoint> aggregated = StateSeriesCalculator.aggregate(deltas,
+				(String) stateAggregationCombo.getSelectedItem());
+		TimeTableXYDataset stateDataset = new TimeTableXYDataset();
+		for (StateSeriesCalculator.StatePoint row : aggregated) {
+			Date date = new Date(row.timestamp());
+			stateDataset.add(new Millisecond(date), row.sweDelta(), cfg("charts.state.labels.swe", "swe"));
+			stateDataset.add(new Millisecond(date), row.aetDelta(), cfg("charts.state.labels.aet_sum", "rootzone_aet + canopy_aet"));
+			stateDataset.add(new Millisecond(date), row.canopyDelta(), cfg("charts.state.labels.canopy_delta", "canopy_final - canopy_initial"));
+			stateDataset.add(new Millisecond(date), row.rootzoneDelta(), cfg("charts.state.labels.rootzone_delta", "rootzone_final - rootzone_initial"));
+			stateDataset.add(new Millisecond(date), row.runoffDelta(), cfg("charts.state.labels.runoff_delta", "runoff_final - runoff_initial"));
+			stateDataset.add(new Millisecond(date), row.groundDelta(), cfg("charts.state.labels.ground_delta", "ground_final - ground_initial"));
+		}
+		plot.setDataset(stateDataset);
+		plot.setRenderer(stackedRenderer);
+		stackedRenderer.setSeriesPaint(0, cfgColor("charts.state.colors.swe", "#808080"));
+		stackedRenderer.setSeriesPaint(1, cfgColor("charts.state.colors.aet_sum", "#F97316"));
+		stackedRenderer.setSeriesPaint(2, cfgColor("charts.state.colors.canopy_delta", "#22C55E"));
+		stackedRenderer.setSeriesPaint(3, cfgColor("charts.state.colors.rootzone_delta", "#784820"));
+		stackedRenderer.setSeriesPaint(4, cfgColor("charts.state.colors.runoff_delta", "#0000FF"));
+		stackedRenderer.setSeriesPaint(5, cfgColor("charts.state.colors.ground_delta", "#7D7D7D"));
+		dataset.removeAllSeries();
+		reloadSeriesList();
+		appendLog("Caricate serie state impilate da " + table + " | basin " + basinId + " | aggregazione: "
+				+ stateAggregationCombo.getSelectedItem() + " | punti: " + aggregated.size());
+	}
+
+	private String cfg(String key, String defaultValue) {
+		return ExplorerConfig.chartOption(key, defaultValue);
+	}
+
+	private Color cfgColor(String key, String defaultHex) {
+		String raw = cfg(key, defaultHex);
+		try {
+			return Color.decode(raw.startsWith("#") ? raw : ("#" + raw));
+		} catch (NumberFormatException ex) {
+			return Color.decode(defaultHex);
+		}
+	}
+
+
+	private void addLineSeries(List<TimeseriesLoader.TimeValueRow> rows, String key, String label, Color color) {
+		TimeSeries series = new TimeSeries(label);
+		for (TimeseriesLoader.TimeValueRow row : rows) {
+			double v = value(row, key);
+			if (Double.isFinite(v)) {
+				series.addOrUpdate(new Millisecond(new Date(row.timestamp())), v);
+			}
+		}
+		dataset.addSeries(series);
+		renderer.setSeriesPaint(dataset.getSeriesCount() - 1, color);
+	}
+
+	private void addSummedLineSeries(List<TimeseriesLoader.TimeValueRow> rows, String label, String[] keys, Color color) {
+		TimeSeries series = new TimeSeries(label);
+		for (TimeseriesLoader.TimeValueRow row : rows) {
+			double sum = 0d;
+			boolean valid = true;
+			for (String key : keys) {
+				double v = value(row, key);
+				if (!Double.isFinite(v)) {
+					valid = false;
+					break;
+				}
+				sum += v;
+			}
+			if (valid) {
+				series.addOrUpdate(new Millisecond(new Date(row.timestamp())), sum);
+			}
+		}
+		dataset.addSeries(series);
+		renderer.setSeriesPaint(dataset.getSeriesCount() - 1, color);
+	}
+
+	private double value(TimeseriesLoader.TimeValueRow row, String key) {
+		if (row == null || row.values() == null) {
+			return Double.NaN;
+		}
+		Double v = row.values().get(key);
+		return v == null ? Double.NaN : v.doubleValue();
 	}
 
 	private void addSelectedSeriesFromGaugeCombo() {
@@ -609,6 +862,124 @@ public final class TimeseriesWindow {
 		}
 		return new long[] { min, max };
 	}
+
+
+	private void executeConsoleCommand(String commandLine) {
+		String raw = commandLine == null ? "" : commandLine.trim();
+		if (raw.isBlank()) {
+			return;
+		}
+		commandField.setText("");
+		appendLog("> " + raw);
+		String[] parts = raw.split("\\s+");
+		String cmd = parts[0].toLowerCase(Locale.ROOT);
+		try {
+			switch (cmd) {
+			case "help":
+				appendLog("Comandi: help | list | remove <n> | zoom <dal> <al> | resetzoom | agg <opzione> | clear");
+				appendLog("Date supportate: yyyy-MM-dd oppure dd/MM/yyyy");
+				break;
+			case "list":
+				listSeriesInConsole();
+				break;
+			case "remove":
+				if (parts.length < 2) {
+					appendLog("Uso: remove <n>");
+					break;
+				}
+				removeAddedSeries(Integer.parseInt(parts[1]));
+				break;
+			case "zoom":
+				if (parts.length < 3) {
+					appendLog("Uso: zoom <dal> <al>");
+					break;
+				}
+				Long from = parseFlexibleDate(parts[1]);
+				Long to = parseFlexibleDate(parts[2]);
+				if (from == null || to == null || from > to) {
+					appendLog("Date non valide. Usa yyyy-MM-dd o dd/MM/yyyy.");
+					break;
+				}
+				plot.getDomainAxis().setRange(from, to);
+				appendLog("Zoom applicato.");
+				break;
+			case "resetzoom":
+				chartPanel.restoreAutoBounds();
+				appendLog("Zoom resettato.");
+				break;
+			case "agg":
+				if (!"state".equalsIgnoreCase(activeType)) {
+					appendLog("agg disponibile solo in modalità state.");
+					break;
+				}
+				if (parts.length < 2) {
+					appendLog("Uso: agg <1h|12h|24h|settimana|mese|anno>");
+					break;
+				}
+				String target = parts[1];
+				if (!Arrays.asList(ExplorerConfig.stateAggregationOptions()).contains(target)) {
+					appendLog("Aggregazione non valida: " + target);
+					break;
+				}
+				stateAggregationCombo.setSelectedItem(target);
+				appendLog("Aggregazione impostata: " + target);
+				break;
+			case "clear":
+				statusArea.setText("");
+				appendLog("Console pulita.");
+				break;
+			default:
+				appendLog("Comando non riconosciuto. Digita help.");
+			}
+		} catch (Exception ex) {
+			appendLog("Errore comando: " + ex.getMessage());
+		}
+	}
+
+	private Long parseFlexibleDate(String text) {
+		Long iso = parseDateOrNull(text);
+		if (iso != null) {
+			return iso;
+		}
+		try {
+			SimpleDateFormat fmt = new SimpleDateFormat("dd/MM/yyyy", Locale.ROOT);
+			fmt.setLenient(false);
+			fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+			Date date = fmt.parse(text.trim());
+			return date == null ? null : date.getTime();
+		} catch (ParseException ex) {
+			return null;
+		}
+	}
+
+	private void removeAddedSeries(int oneBased) {
+		if (dataset.getSeriesCount() <= 1) {
+			appendLog("Nessuna serie aggiunta da rimuovere.");
+			return;
+		}
+		int index = oneBased;
+		if (index <= 0 || index >= dataset.getSeriesCount()) {
+			appendLog("Indice non valido. Usa list per vedere le serie.");
+			return;
+		}
+		String removedKey = dataset.getSeries(index).getKey().toString();
+		dataset.removeSeries(index);
+		applySeriesStyles();
+		reloadSeriesList();
+		appendLog("Linea eliminata via console: " + removedKey);
+	}
+
+	private void listSeriesInConsole() {
+		if (dataset.getSeriesCount() == 0) {
+			appendLog("Nessuna serie caricata.");
+			return;
+		}
+		appendLog("[0] base/non removibile: " + dataset.getSeries(0).getKey());
+		for (int i = 1; i < dataset.getSeriesCount(); i++) {
+			appendLog("[" + i + "] " + dataset.getSeries(i).getKey());
+		}
+	}
+
 
 	private void appendLog(String message) {
 		statusArea.append("$ " + message + "\n");

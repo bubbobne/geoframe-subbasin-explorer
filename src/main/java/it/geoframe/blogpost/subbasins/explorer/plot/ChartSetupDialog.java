@@ -6,6 +6,9 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 import javax.swing.JButton;
@@ -23,6 +26,7 @@ public final class ChartSetupDialog {
 	private final JDialog dialog = new JDialog();
 	private final JComboBox<String> simulationCombo = new JComboBox<>();
 	private final JComboBox<String> typeCombo = new JComboBox<>(new String[] { "discharge", "state", "fluxes" });
+	private final List<String> allSimulationTables = new ArrayList<>();
 
 	public ChartSetupDialog(Component parent, ProjectMode mode, String[] simulationTables, Consumer<ChartRequest> onConfirm) {
 		dialog.setModal(false);
@@ -40,14 +44,16 @@ public final class ChartSetupDialog {
 			panel.add(new JLabel("Simulazione da plottare:"), gbc);
 			gbc.gridy++;
 			for (String t : simulationTables) {
-				simulationCombo.addItem(t);
+				allSimulationTables.add(t);
 			}
+			reloadSimulationCombo();
 			panel.add(simulationCombo, gbc);
 			gbc.gridy++;
 		}
 		panel.add(new JLabel("Tipo grafico:"), gbc);
 		gbc.gridy++;
 		panel.add(typeCombo, gbc);
+		typeCombo.addActionListener(e -> reloadSimulationCombo());
 		gbc.gridy++;
 		JButton nextButton = new JButton("Avanti");
 		nextButton.addActionListener(e -> {
@@ -58,6 +64,25 @@ public final class ChartSetupDialog {
 		dialog.add(panel, BorderLayout.CENTER);
 		dialog.setSize(new Dimension(420, 260));
 		dialog.setLocationRelativeTo(parent);
+	}
+
+	private void reloadSimulationCombo() {
+		simulationCombo.removeAllItems();
+		String type = ((String) typeCombo.getSelectedItem());
+		for (String table : allSimulationTables) {
+			if (table == null) {
+				continue;
+			}
+			String normalized = table.toLowerCase(Locale.ROOT);
+			boolean isDischarge = normalized.contains("discharge");
+			if ("discharge".equalsIgnoreCase(type) && !isDischarge) {
+				continue;
+			}
+			if (("state".equalsIgnoreCase(type) || "fluxes".equalsIgnoreCase(type)) && isDischarge) {
+				continue;
+			}
+			simulationCombo.addItem(table);
+		}
 	}
 
 	public void showDialog() {

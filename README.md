@@ -164,6 +164,49 @@ Default keys:
 - `tables.geopackage.network`
 - `tables.geopackage.topology.prefix`
 - `tables.geopackage.simulation.prefix`
+- `charts.state.aggregation.options`
+- `charts.state.aggregation.default`
+- `charts.fluxes.columns.*`
+- `charts.fluxes.labels.*`
+- `charts.fluxes.colors.*`
+- `charts.state.columns.*`
+- `charts.state.labels.*`
+- `charts.state.colors.*`
+
+### Chart parametrization
+
+
+### Chart console commands
+
+In the lower black console area of the chart window, you can type commands.
+
+Supported commands:
+- `help` → show command help
+- `list` → list current plotted series with indexes
+- `remove <n>` → remove a plotted series by index (`0` is the base series and cannot be removed)
+- `zoom <from> <to>` → zoom x-axis to a date range (`yyyy-MM-dd` or `dd/MM/yyyy`)
+- `resetzoom` → restore automatic chart bounds
+- `agg <option>` → change state aggregation on-the-fly (`1h`, `12h`, `24h`, `settimana`, `mese`, `anno`) when in `state` mode
+- `clear` → clear console output
+
+Examples:
+- `zoom 01/02/2021 03/04/2021`
+- `remove 1`
+- `agg mese`
+
+
+You can customize state/fluxes charts directly from `explorer.properties` without changing code:
+
+- **Columns mapping**: remap expected database columns for state and fluxes (for example when schema names differ across projects).
+- **Series labels**: define plot legend labels shown in the UI.
+- **Series colors**: set colors in hex format (`#RRGGBB`).
+- **State aggregation**: define available aggregation buckets and default option.
+
+Examples:
+- `charts.fluxes.columns.melting_discharge=melting_discharge`
+- `charts.fluxes.colors.melting_discharge=#75C4FF`
+- `charts.state.labels.aet_sum=rootzone_aet + canopy_aet`
+- `charts.state.aggregation.options=1h,12h,24h,settimana,mese,anno`
 
 ---
 

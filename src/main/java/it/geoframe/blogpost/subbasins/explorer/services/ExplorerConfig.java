@@ -54,9 +54,28 @@ public final class ExplorerConfig {
 		return get("tables.timeseries.columns.value", "value");
 	}
 
+
+	public static String[] stateAggregationOptions() {
+		String configured = get("charts.state.aggregation.options", "1h,12h,24h,settimana,mese,anno");
+		String[] parts = configured.split(",");
+		for (int i = 0; i < parts.length; i++) {
+			parts[i] = parts[i].trim();
+		}
+		return parts;
+	}
+
+	public static String stateAggregationDefault() {
+		return get("charts.state.aggregation.default", "mese");
+	}
+
 	public static String[] timeseriesBasinIdCandidates() {
 		String configured = get("tables.timeseries.columns.basin-id.candidates", "basin_id,basinid,id");
 		return configured.split(",");
+	}
+
+
+	public static String chartOption(String key, String defaultValue) {
+		return get(key, defaultValue);
 	}
 
 	private static String get(String key, String defaultValue) {
