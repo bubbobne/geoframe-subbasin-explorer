@@ -7,6 +7,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -41,6 +42,16 @@ public final class TimeseriesLoader {
 			return count;
 		}
 		return fillSeriesFromDb(config.sqlitePath(), table, basinId, series);
+	}
+
+	public Set<String> listColumnNamesFromAnyInput(ProjectConfig config, String table) {
+		if (config == null || table == null || table.isBlank()) {
+			return Set.of();
+		}
+		Set<String> out = new LinkedHashSet<>();
+		out.addAll(repository.listColumnNames(config.geopackagePath(), table));
+		out.addAll(repository.listColumnNames(config.sqlitePath(), table));
+		return out;
 	}
 
 	private int fillSeriesFromDb(Path dbPath, String table, String basinId, TimeSeries series) {
