@@ -222,6 +222,24 @@ public final class ProjectValidator {
 		}
 	}
 
+	public static List<String> listSimulationTables(Path sqliteDbPath, String simulationPrefix, int limit)
+			throws SQLException {
+		try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + sqliteDbPath)) {
+			List<String> out = new ArrayList<>();
+			try (PreparedStatement ps = c.prepareStatement(
+					"SELECT name FROM sqlite_master WHERE type IN ('table','view') AND lower(name) LIKE lower(?) ORDER BY name LIMIT ?")) {
+				ps.setString(1, simulationPrefix + "%");
+				ps.setInt(2, limit);
+				try (ResultSet rs = ps.executeQuery()) {
+					while (rs.next()) {
+						out.add(rs.getString(1));
+					}
+				}
+			}
+			return out;
+		}
+	}
+
 	private static List<String> listSimulationDischargeTables(Connection c, String simulationPrefix, int limit)
 			throws SQLException {
 		List<String> out = new ArrayList<>();
