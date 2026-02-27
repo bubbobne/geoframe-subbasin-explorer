@@ -8,6 +8,8 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
@@ -37,7 +39,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
-import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.WindowConstants;
 
@@ -61,6 +62,7 @@ import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 public final class TimeseriesWindow {
 	private static final String STREAM_GAUGE_PREFIX = "stream gauge";
 	private static final String DATE_FMT = "yyyy-MM-dd";
+	private static final String CONSOLE_PROMPT = "$ ";
 	private final ProjectConfig config;
 	private final TimeseriesLoader loader;
 	private final Supplier<List<String>> tableSupplier;
@@ -83,7 +85,7 @@ public final class TimeseriesWindow {
 	private final CardLayout modeControlsLayout;
 	private final JPanel modeControlsContainer;
 	private final ChartPanel chartPanel;
-	private final JTextField commandField;
+	private int consoleInputStart = 0;
 
 	public TimeseriesWindow(Component parent, ProjectConfig config, TimeseriesLoader loader,
 			Supplier<List<String>> tableSupplier, Supplier<List<String>> basinSupplier,
@@ -177,38 +179,43 @@ public final class TimeseriesWindow {
 		gbc.gridy++;
 
 		consoleHistoryArea = new JTextArea();
-		consoleHistoryArea.setEditable(false);
-		consoleHistoryArea.setLineWrap(true);
-		consoleHistoryArea.setWrapStyleWord(true);
+		consoleHistoryArea.setEditable(true);
+		consoleHistoryArea.setLineWrap(false);
 		consoleHistoryArea.setBackground(new Color(15, 18, 22));
 		consoleHistoryArea.setForeground(new Color(134, 239, 172));
 		consoleHistoryArea.setCaretColor(new Color(134, 239, 172));
 		consoleHistoryArea.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
-		JScrollPane consoleScroll = new JScrollPane(consoleHistoryArea);
+		consoleHistoryArea.addKeyListener(new KeyAdapter() {
+			@Override
+			public void keyPressed(KeyEvent e) {
+				if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+					e.consume();
+					handleConsoleEnter();
+					return;
+				}
+				if ((e.getKeyCode() == KeyEvent.VK_BACK_SPACE || e.getKeyCode() == KeyEvent.VK_LEFT)
+						&& consoleHistoryArea.getCaretPosition() <= consoleInputStart) {
+					e.consume();
+					return;
+				}
+				if (e.getKeyCode() == KeyEvent.VK_HOME && consoleHistoryArea.getCaretPosition() >= consoleInputStart) {
+					e.consume();
+					consoleHistoryArea.setCaretPosition(consoleInputStart);
+				}
+			}
 
-		consoleHistoryArea = new JTextArea();
-		consoleHistoryArea.setEditable(false);
-		consoleHistoryArea.setLineWrap(true);
-		consoleHistoryArea.setWrapStyleWord(true);
-		consoleHistoryArea.setBackground(new Color(15, 18, 22));
-		consoleHistoryArea.setForeground(new Color(134, 239, 172));
-		consoleHistoryArea.setCaretColor(new Color(134, 239, 172));
-		consoleHistoryArea.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
+			@Override
+			public void keyTyped(KeyEvent e) {
+				if (consoleHistoryArea.getCaretPosition() < consoleInputStart) {
+					consoleHistoryArea.setCaretPosition(consoleHistoryArea.getDocument().getLength());
+				}
+			}
+		});
 		JScrollPane consoleScroll = new JScrollPane(consoleHistoryArea);
-
-		commandField = new JTextField();
-		commandField.addActionListener(e -> executeConsoleCommand(commandField.getText()));
-		commandField.setBackground(new Color(15, 18, 22));
-		commandField.setForeground(new Color(134, 239, 172));
-		commandField.setCaretColor(new Color(134, 239, 172));
-		JPanel cmdRow = new JPanel(new BorderLayout(4, 4));
-		cmdRow.add(new JLabel("$"), BorderLayout.WEST);
-		cmdRow.add(commandField, BorderLayout.CENTER);
 
 		JPanel commandPanel = new JPanel(new BorderLayout(4, 4));
 		commandPanel.add(new JLabel("Console"), BorderLayout.NORTH);
 		commandPanel.add(consoleScroll, BorderLayout.CENTER);
-		commandPanel.add(cmdRow, BorderLayout.SOUTH);
 
 		chartPanel = new ChartPanel(chart);
 		chartPanel.setMouseWheelEnabled(true);
@@ -221,6 +228,7 @@ public final class TimeseriesWindow {
 		dialog.add(splitPane, BorderLayout.CENTER);
 		dialog.setSize(new Dimension(1240, 760));
 		dialog.setLocationRelativeTo(parent);
+		appendConsolePrompt();
 	}
 
 	public void showForSelection(String subbasinId, String firstTable, String type) {
@@ -240,9 +248,9 @@ public final class TimeseriesWindow {
 		plot.setRenderer(renderer);
 		dialog.setTitle("Vista " + activeType);
 		dialog.setVisible(true);
-		commandField.requestFocusInWindow();
+		consoleHistoryArea.requestFocusInWindow();
 		appendLog("Aperta vista " + activeType + " per sottobacino " + String.valueOf(subbasinId) + ".");
-		appendLog("Console pronta. Digita help per i comandi.");
+		appendConsoleLine("Console pronta. Digita help per i comandi.");
 		addSelectedSeriesFromSimulationCombo();
 	}
 
@@ -988,16 +996,14 @@ public final class TimeseriesWindow {
 		if (raw.isBlank()) {
 			return;
 		}
-		commandField.setText("");
-		appendConsole(raw);
 		String[] parts = raw.split("\\s+");
 		String cmd = parts[0].toLowerCase(Locale.ROOT);
 		try {
 			switch (cmd) {
 			case "help":
-				appendLog(
+				appendConsoleLine(
 						"Comandi: help | tables | metrics <tabSim> <subbasinId> <tabObs> [dal] [al] | list | remove <n> | zoom <dal> <al> | resetzoom | agg <opzione> | clear");
-				appendLog("Date supportate: yyyy-MM-dd oppure dd/MM/yyyy");
+				appendConsoleLine("Date supportate: yyyy-MM-dd oppure dd/MM/yyyy");
 				break;
 			case "tables":
 				listTablesInConsole();
@@ -1010,55 +1016,55 @@ public final class TimeseriesWindow {
 				break;
 			case "remove":
 				if (parts.length < 2) {
-					appendLog("Uso: remove <n>");
+					appendConsoleLine("Uso: remove <n>");
 					break;
 				}
 				removeAddedSeries(Integer.parseInt(parts[1]));
 				break;
 			case "zoom":
 				if (parts.length < 3) {
-					appendLog("Uso: zoom <dal> <al>");
+					appendConsoleLine("Uso: zoom <dal> <al>");
 					break;
 				}
 				Long from = parseFlexibleDate(parts[1]);
 				Long to = parseFlexibleDate(parts[2]);
 				if (from == null || to == null || from > to) {
-					appendLog("Date non valide. Usa yyyy-MM-dd o dd/MM/yyyy.");
+					appendConsoleLine("Date non valide. Usa yyyy-MM-dd o dd/MM/yyyy.");
 					break;
 				}
 				plot.getDomainAxis().setRange(from, to);
-				appendLog("Zoom applicato.");
+				appendConsoleLine("Zoom applicato.");
 				break;
 			case "resetzoom":
 				chartPanel.restoreAutoBounds();
-				appendLog("Zoom resettato.");
+				appendConsoleLine("Zoom resettato.");
 				break;
 			case "agg":
 				if (!"state".equalsIgnoreCase(activeType)) {
-					appendLog("agg disponibile solo in modalità state.");
+					appendConsoleLine("agg disponibile solo in modalità state.");
 					break;
 				}
 				if (parts.length < 2) {
-					appendLog("Uso: agg <1h|12h|24h|settimana|mese|anno>");
+					appendConsoleLine("Uso: agg <1h|12h|24h|settimana|mese|anno>");
 					break;
 				}
 				String target = parts[1];
 				if (!Arrays.asList(ExplorerConfig.stateAggregationOptions()).contains(target)) {
-					appendLog("Aggregazione non valida: " + target);
+					appendConsoleLine("Aggregazione non valida: " + target);
 					break;
 				}
 				stateAggregationCombo.setSelectedItem(target);
-				appendLog("Aggregazione impostata: " + target);
+				appendConsoleLine("Aggregazione impostata: " + target);
 				break;
 			case "clear":
 				messageArea.setText("");
-				appendLog("Messaggi puliti. Storico console mantenuto.");
+				consoleHistoryArea.setText("");
 				break;
 			default:
-				appendLog("Comando non riconosciuto. Digita help.");
+				appendConsoleLine("Comando non riconosciuto. Digita help.");
 			}
 		} catch (Exception ex) {
-			appendLog("Errore comando: " + ex.getMessage());
+			appendConsoleLine("Errore comando: " + ex.getMessage());
 		}
 	}
 
@@ -1080,47 +1086,47 @@ public final class TimeseriesWindow {
 
 	private void removeAddedSeries(int oneBased) {
 		if (dataset.getSeriesCount() <= 1) {
-			appendLog("Nessuna serie aggiunta da rimuovere.");
+			appendConsoleLine("Nessuna serie aggiunta da rimuovere.");
 			return;
 		}
 		int index = oneBased;
 		if (index <= 0 || index >= dataset.getSeriesCount()) {
-			appendLog("Indice non valido. Usa list per vedere le serie.");
+			appendConsoleLine("Indice non valido. Usa list per vedere le serie.");
 			return;
 		}
 		String removedKey = dataset.getSeries(index).getKey().toString();
 		dataset.removeSeries(index);
 		applySeriesStyles();
 		reloadSeriesList();
-		appendLog("Linea eliminata via console: " + removedKey);
+		appendConsoleLine("Linea eliminata via console: " + removedKey);
 	}
 
 	private void listSeriesInConsole() {
 		if (dataset.getSeriesCount() == 0) {
-			appendLog("Nessuna serie caricata.");
+			appendConsoleLine("Nessuna serie caricata.");
 			return;
 		}
-		appendLog("[0] base/non removibile: " + dataset.getSeries(0).getKey());
+		appendConsoleLine("[0] base/non removibile: " + dataset.getSeries(0).getKey());
 		for (int i = 1; i < dataset.getSeriesCount(); i++) {
-			appendLog("[" + i + "] " + dataset.getSeries(i).getKey());
+			appendConsoleLine("[" + i + "] " + dataset.getSeries(i).getKey());
 		}
 	}
 
 	private void listTablesInConsole() {
 		List<String> tables = tableSupplier.get();
 		if (tables == null || tables.isEmpty()) {
-			appendLog("Nessuna tabella disponibile.");
+			appendConsoleLine("Nessuna tabella disponibile.");
 			return;
 		}
-		appendLog("Tabelle disponibili (" + tables.size() + "):");
+		appendConsoleLine("Tabelle disponibili (" + tables.size() + "):");
 		for (String table : tables) {
-			appendLog("- " + table);
+			appendConsoleLine("- " + table);
 		}
 	}
 
 	private void computeMetricsFromTables(String[] parts) {
 		if (parts.length < 4) {
-			appendLog("Uso: metrics <tabSim> <subbasinId> <tabObs> [dal] [al]");
+			appendConsoleLine("Uso: metrics <tabSim> <subbasinId> <tabObs> [dal] [al]");
 			return;
 		}
 		String simulatedTable = parts[1];
@@ -1131,19 +1137,19 @@ public final class TimeseriesWindow {
 		if (parts.length >= 5) {
 			from = parseFlexibleDate(parts[4]);
 			if (from == null) {
-				appendLog("Data inizio non valida. Usa yyyy-MM-dd o dd/MM/yyyy.");
+				appendConsoleLine("Data inizio non valida. Usa yyyy-MM-dd o dd/MM/yyyy.");
 				return;
 			}
 		}
 		if (parts.length >= 6) {
 			to = parseFlexibleDate(parts[5]);
 			if (to == null) {
-				appendLog("Data fine non valida. Usa yyyy-MM-dd o dd/MM/yyyy.");
+				appendConsoleLine("Data fine non valida. Usa yyyy-MM-dd o dd/MM/yyyy.");
 				return;
 			}
 		}
 		if (from != null && to != null && from > to) {
-			appendLog("Intervallo non valido: data inizio > data fine.");
+			appendConsoleLine("Intervallo non valido: data inizio > data fine.");
 			return;
 		}
 
@@ -1152,19 +1158,19 @@ public final class TimeseriesWindow {
 		int simCount = loader.fillSeriesFromAnyInput(config, simulatedTable, subbasinId, simulated);
 		int obsCount = loader.fillSeriesFromAnyInput(config, observedTable, subbasinId, observed);
 		if (simCount <= 0) {
-			appendLog("Nessun dato simulato trovato in " + simulatedTable + " per basin " + subbasinId + ".");
+			appendConsoleLine("Nessun dato simulato trovato in " + simulatedTable + " per basin " + subbasinId + ".");
 			return;
 		}
 		if (obsCount <= 0) {
-			appendLog("Nessun dato osservato trovato in " + observedTable + " per basin " + subbasinId + ".");
+			appendConsoleLine("Nessun dato osservato trovato in " + observedTable + " per basin " + subbasinId + ".");
 			return;
 		}
 		double[] metrics = computeMetrics(simulated, observed, from, to);
 		if (Double.isNaN(metrics[0])) {
-			appendLog("Metriche non calcolabili: servono dati in comune nel periodo selezionato.");
+			appendConsoleLine("Metriche non calcolabili: servono dati in comune nel periodo selezionato.");
 			return;
 		}
-		appendLog(String.format(Locale.ROOT,
+		appendConsoleLine(String.format(Locale.ROOT,
 				"Metriche [%s/%s vs %s/%s] -> KGE=%.4f, NSE=%.4f, NSElog=%.4f", simulatedTable, subbasinId,
 				observedTable, subbasinId, metrics[0], metrics[1], metrics[2]));
 	}
@@ -1175,8 +1181,27 @@ public final class TimeseriesWindow {
 		messageArea.setCaretPosition(messageArea.getDocument().getLength());
 	}
 
-	private void appendConsole(String commandText) {
-		consoleHistoryArea.append("$ " + commandText + "\n");
+	private void appendConsoleLine(String message) {
+		consoleHistoryArea.append(message + "\n");
 		consoleHistoryArea.setCaretPosition(consoleHistoryArea.getDocument().getLength());
+	}
+
+	private void appendConsolePrompt() {
+		consoleHistoryArea.append(CONSOLE_PROMPT);
+		consoleInputStart = consoleHistoryArea.getDocument().getLength();
+		consoleHistoryArea.setCaretPosition(consoleHistoryArea.getDocument().getLength());
+	}
+
+	private void handleConsoleEnter() {
+		String content = consoleHistoryArea.getText();
+		if (consoleInputStart > content.length()) {
+			consoleInputStart = content.length();
+		}
+		String raw = content.substring(consoleInputStart).trim();
+		consoleHistoryArea.append("\n");
+		if (!raw.isBlank()) {
+			executeConsoleCommand(raw);
+		}
+		appendConsolePrompt();
 	}
 }
