@@ -72,7 +72,8 @@ public final class TimeseriesWindow {
 	private final JComboBox<String> streamGaugeCombo;
 	private final JComboBox<String> stateAggregationCombo;
 	private final JList<String> seriesList;
-	private final JTextArea statusArea;
+	private final JTextArea messageArea;
+	private final JTextArea consoleHistoryArea;
 	private final TimeSeriesCollection dataset;
 	private String activeType;
 	private String baseSeriesKey;
@@ -157,45 +158,55 @@ public final class TimeseriesWindow {
 		controlsPanel.add(removeSelectedLineButton, gbc);
 		gbc.gridy++;
 
-		statusArea = new JTextArea();
-		statusArea.setEditable(false);
-		statusArea.setLineWrap(true);
-		statusArea.setWrapStyleWord(true);
-		statusArea.setBackground(new Color(15, 18, 22));
-		statusArea.setForeground(new Color(134, 239, 172));
-		statusArea.setCaretColor(new Color(134, 239, 172));
-		statusArea.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
-		JScrollPane messagesScroll = new JScrollPane(statusArea);
+		messageArea = new JTextArea();
+		messageArea.setEditable(false);
+		messageArea.setLineWrap(true);
+		messageArea.setWrapStyleWord(true);
+		messageArea.setBackground(Color.WHITE);
+		messageArea.setForeground(Color.BLACK);
+		messageArea.setCaretColor(Color.BLACK);
+		messageArea.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
+		JScrollPane messagesScroll = new JScrollPane(messageArea);
 
 		JPanel messagesPanel = new JPanel(new BorderLayout(4, 4));
 		messagesPanel.add(new JLabel("Messaggi"), BorderLayout.NORTH);
 		messagesPanel.add(messagesScroll, BorderLayout.CENTER);
+		gbc.fill = GridBagConstraints.BOTH;
+		gbc.weighty = 1;
+		controlsPanel.add(messagesPanel, gbc);
+		gbc.gridy++;
+
+		consoleHistoryArea = new JTextArea();
+		consoleHistoryArea.setEditable(false);
+		consoleHistoryArea.setLineWrap(true);
+		consoleHistoryArea.setWrapStyleWord(true);
+		consoleHistoryArea.setBackground(new Color(15, 18, 22));
+		consoleHistoryArea.setForeground(new Color(134, 239, 172));
+		consoleHistoryArea.setCaretColor(new Color(134, 239, 172));
+		consoleHistoryArea.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
+		JScrollPane consoleScroll = new JScrollPane(consoleHistoryArea);
 
 		commandField = new JTextField();
 		commandField.addActionListener(e -> executeConsoleCommand(commandField.getText()));
-		JButton runCommandButton = new JButton("Esegui");
-		runCommandButton.addActionListener(e -> executeConsoleCommand(commandField.getText()));
+		commandField.setBackground(new Color(15, 18, 22));
+		commandField.setForeground(new Color(134, 239, 172));
+		commandField.setCaretColor(new Color(134, 239, 172));
 		JPanel cmdRow = new JPanel(new BorderLayout(4, 4));
-		cmdRow.add(new JLabel(">"), BorderLayout.WEST);
+		cmdRow.add(new JLabel("$"), BorderLayout.WEST);
 		cmdRow.add(commandField, BorderLayout.CENTER);
-		cmdRow.add(runCommandButton, BorderLayout.EAST);
 
 		JPanel commandPanel = new JPanel(new BorderLayout(4, 4));
 		commandPanel.add(new JLabel("Console"), BorderLayout.NORTH);
-		commandPanel.add(cmdRow, BorderLayout.CENTER);
-
-		JSplitPane logConsoleSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, messagesPanel, commandPanel);
-		logConsoleSplit.setResizeWeight(0.84);
-		logConsoleSplit.setContinuousLayout(true);
-		gbc.fill = GridBagConstraints.BOTH;
-		gbc.weighty = 1;
-		controlsPanel.add(logConsoleSplit, gbc);
-
+		commandPanel.add(consoleScroll, BorderLayout.CENTER);
+		commandPanel.add(cmdRow, BorderLayout.SOUTH);
 
 		chartPanel = new ChartPanel(chart);
 		chartPanel.setMouseWheelEnabled(true);
 		chartPanel.setMouseZoomable(true, false);
-		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, chartPanel);
+		JSplitPane chartWithConsoleSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chartPanel, commandPanel);
+		chartWithConsoleSplit.setResizeWeight(0.67);
+		chartWithConsoleSplit.setContinuousLayout(true);
+		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, chartWithConsoleSplit);
 		splitPane.setResizeWeight(0.27);
 		dialog.add(splitPane, BorderLayout.CENTER);
 		dialog.setSize(new Dimension(1240, 760));
@@ -219,6 +230,7 @@ public final class TimeseriesWindow {
 		plot.setRenderer(renderer);
 		dialog.setTitle("Vista " + activeType);
 		dialog.setVisible(true);
+		commandField.requestFocusInWindow();
 		appendLog("Aperta vista " + activeType + " per sottobacino " + String.valueOf(subbasinId) + ".");
 		appendLog("Console pronta. Digita help per i comandi.");
 		addSelectedSeriesFromSimulationCombo();
@@ -967,14 +979,21 @@ public final class TimeseriesWindow {
 			return;
 		}
 		commandField.setText("");
-		appendLog("> " + raw);
+		appendConsole(raw);
 		String[] parts = raw.split("\\s+");
 		String cmd = parts[0].toLowerCase(Locale.ROOT);
 		try {
 			switch (cmd) {
 			case "help":
-				appendLog("Comandi: help | list | remove <n> | zoom <dal> <al> | resetzoom | agg <opzione> | clear");
+				appendLog(
+						"Comandi: help | tables | metrics <tabSim> <subbasinId> <tabObs> [dal] [al] | list | remove <n> | zoom <dal> <al> | resetzoom | agg <opzione> | clear");
 				appendLog("Date supportate: yyyy-MM-dd oppure dd/MM/yyyy");
+				break;
+			case "tables":
+				listTablesInConsole();
+				break;
+			case "metrics":
+				computeMetricsFromTables(parts);
 				break;
 			case "list":
 				listSeriesInConsole();
@@ -1022,8 +1041,8 @@ public final class TimeseriesWindow {
 				appendLog("Aggregazione impostata: " + target);
 				break;
 			case "clear":
-				statusArea.setText("");
-				appendLog("Console pulita.");
+				messageArea.setText("");
+				appendLog("Messaggi puliti. Storico console mantenuto.");
 				break;
 			default:
 				appendLog("Comando non riconosciuto. Digita help.");
@@ -1077,9 +1096,77 @@ public final class TimeseriesWindow {
 		}
 	}
 
+	private void listTablesInConsole() {
+		List<String> tables = tableSupplier.get();
+		if (tables == null || tables.isEmpty()) {
+			appendLog("Nessuna tabella disponibile.");
+			return;
+		}
+		appendLog("Tabelle disponibili (" + tables.size() + "):");
+		for (String table : tables) {
+			appendLog("- " + table);
+		}
+	}
+
+	private void computeMetricsFromTables(String[] parts) {
+		if (parts.length < 4) {
+			appendLog("Uso: metrics <tabSim> <subbasinId> <tabObs> [dal] [al]");
+			return;
+		}
+		String simulatedTable = parts[1];
+		String subbasinId = parts[2];
+		String observedTable = parts[3];
+		Long from = null;
+		Long to = null;
+		if (parts.length >= 5) {
+			from = parseFlexibleDate(parts[4]);
+			if (from == null) {
+				appendLog("Data inizio non valida. Usa yyyy-MM-dd o dd/MM/yyyy.");
+				return;
+			}
+		}
+		if (parts.length >= 6) {
+			to = parseFlexibleDate(parts[5]);
+			if (to == null) {
+				appendLog("Data fine non valida. Usa yyyy-MM-dd o dd/MM/yyyy.");
+				return;
+			}
+		}
+		if (from != null && to != null && from > to) {
+			appendLog("Intervallo non valido: data inizio > data fine.");
+			return;
+		}
+
+		TimeSeries simulated = new TimeSeries(simulatedTable + " | basin " + subbasinId);
+		TimeSeries observed = new TimeSeries(STREAM_GAUGE_PREFIX + " " + observedTable + " | basin " + subbasinId);
+		int simCount = loader.fillSeriesFromAnyInput(config, simulatedTable, subbasinId, simulated);
+		int obsCount = loader.fillSeriesFromAnyInput(config, observedTable, subbasinId, observed);
+		if (simCount <= 0) {
+			appendLog("Nessun dato simulato trovato in " + simulatedTable + " per basin " + subbasinId + ".");
+			return;
+		}
+		if (obsCount <= 0) {
+			appendLog("Nessun dato osservato trovato in " + observedTable + " per basin " + subbasinId + ".");
+			return;
+		}
+		double[] metrics = computeMetrics(simulated, observed, from, to);
+		if (Double.isNaN(metrics[0])) {
+			appendLog("Metriche non calcolabili: servono dati in comune nel periodo selezionato.");
+			return;
+		}
+		appendLog(String.format(Locale.ROOT,
+				"Metriche [%s/%s vs %s/%s] -> KGE=%.4f, NSE=%.4f, NSElog=%.4f", simulatedTable, subbasinId,
+				observedTable, subbasinId, metrics[0], metrics[1], metrics[2]));
+	}
+
 
 	private void appendLog(String message) {
-		statusArea.append("$ " + message + "\n");
-		statusArea.setCaretPosition(statusArea.getDocument().getLength());
+		messageArea.append("> " + message + "\n");
+		messageArea.setCaretPosition(messageArea.getDocument().getLength());
+	}
+
+	private void appendConsole(String commandText) {
+		consoleHistoryArea.append("$ " + commandText + "\n");
+		consoleHistoryArea.setCaretPosition(consoleHistoryArea.getDocument().getLength());
 	}
 }

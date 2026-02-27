@@ -182,6 +182,8 @@ In the lower black console area of the chart window, you can type commands.
 
 Supported commands:
 - `help` → show command help
+- `tables` → list available tables loaded from project data sources
+- `metrics <tabSim> <subbasinId> <tabObs> [from] [to]` → compute KGE, NSE, NSElog directly from table names/subbasin id (optional date range in `yyyy-MM-dd` or `dd/MM/yyyy`)
 - `list` → list current plotted series with indexes
 - `remove <n>` → remove a plotted series by index (`0` is the base series and cannot be removed)
 - `zoom <from> <to>` → zoom x-axis to a date range (`yyyy-MM-dd` or `dd/MM/yyyy`)
@@ -193,6 +195,7 @@ Examples:
 - `zoom 01/02/2021 03/04/2021`
 - `remove 1`
 - `agg mese`
+- `metrics sim_discharge 17 measurement 2021-01-01 2021-12-31`
 
 
 You can customize state/fluxes charts directly from `explorer.properties` without changing code:
