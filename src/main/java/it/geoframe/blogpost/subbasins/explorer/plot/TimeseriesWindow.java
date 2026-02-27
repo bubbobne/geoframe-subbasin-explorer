@@ -78,7 +78,7 @@ public final class TimeseriesWindow {
 	private final JComboBox<String> stateAggregationCombo;
 	private final JList<String> seriesList;
 	private final JTextArea messageArea;
-	private final JTextArea consoleHistoryArea;
+	private JTextArea consoleHistoryArea;
 	private final TimeSeriesCollection dataset;
 	private String activeType;
 	private String baseSeriesKey;
@@ -220,6 +220,7 @@ public final class TimeseriesWindow {
 		JPanel commandPanel = new JPanel(new BorderLayout(4, 4));
 		commandPanel.add(new JLabel("Console"), BorderLayout.NORTH);
 		commandPanel.add(consoleScroll, BorderLayout.CENTER);
+
 
 		chartPanel = new ChartPanel(chart);
 		chartPanel.setMouseWheelEnabled(true);
