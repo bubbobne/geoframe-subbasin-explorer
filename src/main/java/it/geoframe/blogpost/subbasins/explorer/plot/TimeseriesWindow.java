@@ -39,6 +39,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.WindowConstants;
 
@@ -56,6 +57,7 @@ import org.jfree.data.time.TimeTableXYDataset;
 
 import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesLoader;
 import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesRepository.TableColumnDetail;
+import it.geoframe.blogpost.subbasins.explorer.plot.StateSeriesCalculator.StatePoint;
 import it.geoframe.blogpost.subbasins.explorer.services.ExplorerConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
