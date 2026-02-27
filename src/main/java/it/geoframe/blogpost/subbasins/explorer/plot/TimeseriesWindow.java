@@ -155,6 +155,7 @@ public final class TimeseriesWindow {
 		JButton removeSelectedLineButton = new JButton("Cancella linea selezionata");
 		removeSelectedLineButton.addActionListener(e -> removeSelectedSeries());
 		controlsPanel.add(removeSelectedLineButton, gbc);
+		gbc.gridy++;
 
 		statusArea = new JTextArea();
 		statusArea.setEditable(false);
@@ -164,14 +165,12 @@ public final class TimeseriesWindow {
 		statusArea.setForeground(new Color(134, 239, 172));
 		statusArea.setCaretColor(new Color(134, 239, 172));
 		statusArea.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
-		JScrollPane consoleScroll = new JScrollPane(statusArea);
-		consoleScroll.setPreferredSize(new Dimension(1000, 220));
+		JScrollPane messagesScroll = new JScrollPane(statusArea);
 
-		chartPanel = new ChartPanel(chart);
-		chartPanel.setMouseWheelEnabled(true);
-		chartPanel.setMouseZoomable(true, false);
-		JPanel consolePanel = new JPanel(new BorderLayout(4, 4));
-		consolePanel.add(consoleScroll, BorderLayout.CENTER);
+		JPanel messagesPanel = new JPanel(new BorderLayout(4, 4));
+		messagesPanel.add(new JLabel("Messaggi"), BorderLayout.NORTH);
+		messagesPanel.add(messagesScroll, BorderLayout.CENTER);
+
 		commandField = new JTextField();
 		commandField.addActionListener(e -> executeConsoleCommand(commandField.getText()));
 		JButton runCommandButton = new JButton("Esegui");
@@ -180,11 +179,23 @@ public final class TimeseriesWindow {
 		cmdRow.add(new JLabel(">"), BorderLayout.WEST);
 		cmdRow.add(commandField, BorderLayout.CENTER);
 		cmdRow.add(runCommandButton, BorderLayout.EAST);
-		consolePanel.add(cmdRow, BorderLayout.SOUTH);
-		JSplitPane rightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chartPanel, consolePanel);
-		rightSplit.setResizeWeight(0.68);
-		rightSplit.setContinuousLayout(true);
-		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, rightSplit);
+
+		JPanel commandPanel = new JPanel(new BorderLayout(4, 4));
+		commandPanel.add(new JLabel("Console"), BorderLayout.NORTH);
+		commandPanel.add(cmdRow, BorderLayout.CENTER);
+
+		JSplitPane logConsoleSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, messagesPanel, commandPanel);
+		logConsoleSplit.setResizeWeight(0.84);
+		logConsoleSplit.setContinuousLayout(true);
+		gbc.fill = GridBagConstraints.BOTH;
+		gbc.weighty = 1;
+		controlsPanel.add(logConsoleSplit, gbc);
+
+
+		chartPanel = new ChartPanel(chart);
+		chartPanel.setMouseWheelEnabled(true);
+		chartPanel.setMouseZoomable(true, false);
+		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, chartPanel);
 		splitPane.setResizeWeight(0.27);
 		dialog.add(splitPane, BorderLayout.CENTER);
 		dialog.setSize(new Dimension(1240, 760));
