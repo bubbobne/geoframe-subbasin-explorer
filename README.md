@@ -183,6 +183,7 @@ In the lower black console area of the chart window, you can type commands.
 Supported commands:
 - `help` → show command help
 - `tables` → list available tables loaded from project data sources
+- `dt [nomeTabella]` or `\dt [nomeTabella]` → like Postgres: without table name lists tables, with table name shows columns/details
 - `metrics <tabSim> <subbasinId> <tabObs> [from] [to]` → compute KGE, NSE, NSElog directly from table names/subbasin id (optional date range in `yyyy-MM-dd` or `dd/MM/yyyy`)
 - `list` → list current plotted series with indexes
 - `remove <n>` → remove a plotted series by index (`0` is the base series and cannot be removed)

@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesRepository.TableColumnDetail;
+
 import org.jfree.data.time.Millisecond;
 import org.jfree.data.time.TimeSeries;
 
@@ -56,6 +58,18 @@ public final class TimeseriesLoader {
 		out.addAll(repository.listColumnNames(config.geopackagePath(), table));
 		out.addAll(repository.listColumnNames(config.sqlitePath(), table));
 		return out;
+	}
+
+
+	public List<TableColumnDetail> listTableDetailsFromAnyInput(ProjectConfig config, String table) {
+		if (config == null || table == null || table.isBlank()) {
+			return List.of();
+		}
+		List<TableColumnDetail> gpkgDetails = repository.listTableDetails(config.geopackagePath(), table);
+		if (!gpkgDetails.isEmpty()) {
+			return gpkgDetails;
+		}
+		return repository.listTableDetails(config.sqlitePath(), table);
 	}
 
 	public List<TimeValueRow> loadRowsFromAnyInput(ProjectConfig config, String table, String basinId,

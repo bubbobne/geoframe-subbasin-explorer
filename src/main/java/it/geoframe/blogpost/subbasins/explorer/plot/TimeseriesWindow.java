@@ -55,6 +55,7 @@ import org.jfree.data.time.TimeSeriesDataItem;
 import org.jfree.data.time.TimeTableXYDataset;
 
 import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesLoader;
+import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesRepository.TableColumnDetail;
 import it.geoframe.blogpost.subbasins.explorer.services.ExplorerConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
@@ -1002,11 +1003,19 @@ public final class TimeseriesWindow {
 			switch (cmd) {
 			case "help":
 				appendConsoleLine(
-						"Comandi: help | tables | metrics <tabSim> <subbasinId> <tabObs> [dal] [al] | list | remove <n> | zoom <dal> <al> | resetzoom | agg <opzione> | clear");
+						"Comandi: help | tables | dt [nomeTabella] | \\dt [nomeTabella] | metrics <tabSim> <subbasinId> <tabObs> [dal] [al] | list | remove <n> | zoom <dal> <al> | resetzoom | agg <opzione> | clear");
 				appendConsoleLine("Date supportate: yyyy-MM-dd oppure dd/MM/yyyy");
 				break;
 			case "tables":
 				listTablesInConsole();
+				break;
+			case "dt":
+			case "\\dt":
+				if (parts.length >= 2) {
+					describeTableInConsole(parts[1]);
+				} else {
+					listTablesInConsole();
+				}
 				break;
 			case "metrics":
 				computeMetricsFromTables(parts);
@@ -1121,6 +1130,26 @@ public final class TimeseriesWindow {
 		appendConsoleLine("Tabelle disponibili (" + tables.size() + "):");
 		for (String table : tables) {
 			appendConsoleLine("- " + table);
+		}
+	}
+
+	private void describeTableInConsole(String tableName) {
+		if (tableName == null || tableName.isBlank()) {
+			appendConsoleLine("Uso: dt <nomeTabella>");
+			return;
+		}
+		List<TableColumnDetail> details = loader.listTableDetailsFromAnyInput(config, tableName);
+		if (details.isEmpty()) {
+			appendConsoleLine("Tabella non trovata o non leggibile: " + tableName);
+			return;
+		}
+		appendConsoleLine("Dettaglio tabella '" + tableName + "' (" + details.size() + " colonne):");
+		for (TableColumnDetail c : details) {
+			String type = c.type() == null || c.type().isBlank() ? "<n/a>" : c.type();
+			String defaultValue = c.defaultValue() == null || c.defaultValue().isBlank() ? "-" : c.defaultValue();
+			appendConsoleLine(String.format(Locale.ROOT, "[%d] %s | tipo=%s | notNull=%s | pk=%s | default=%s",
+					c.ordinalPosition(), c.name(), type, c.notNull() ? "yes" : "no", c.primaryKey() ? "yes" : "no",
+					defaultValue));
 		}
 	}
 
