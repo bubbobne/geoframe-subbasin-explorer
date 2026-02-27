@@ -186,6 +186,16 @@ public final class TimeseriesWindow {
 		consoleHistoryArea.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
 		JScrollPane consoleScroll = new JScrollPane(consoleHistoryArea);
 
+		consoleHistoryArea = new JTextArea();
+		consoleHistoryArea.setEditable(false);
+		consoleHistoryArea.setLineWrap(true);
+		consoleHistoryArea.setWrapStyleWord(true);
+		consoleHistoryArea.setBackground(new Color(15, 18, 22));
+		consoleHistoryArea.setForeground(new Color(134, 239, 172));
+		consoleHistoryArea.setCaretColor(new Color(134, 239, 172));
+		consoleHistoryArea.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
+		JScrollPane consoleScroll = new JScrollPane(consoleHistoryArea);
+
 		commandField = new JTextField();
 		commandField.addActionListener(e -> executeConsoleCommand(commandField.getText()));
 		commandField.setBackground(new Color(15, 18, 22));
