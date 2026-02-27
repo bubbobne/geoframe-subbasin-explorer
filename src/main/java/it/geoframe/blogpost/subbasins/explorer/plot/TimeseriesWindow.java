@@ -171,6 +171,20 @@ public final class TimeseriesWindow {
 		JPanel messagesPanel = new JPanel(new BorderLayout(4, 4));
 		messagesPanel.add(new JLabel("Messaggi"), BorderLayout.NORTH);
 		messagesPanel.add(messagesScroll, BorderLayout.CENTER);
+		gbc.fill = GridBagConstraints.BOTH;
+		gbc.weighty = 1;
+		controlsPanel.add(messagesPanel, gbc);
+		gbc.gridy++;
+
+		consoleHistoryArea = new JTextArea();
+		consoleHistoryArea.setEditable(false);
+		consoleHistoryArea.setLineWrap(true);
+		consoleHistoryArea.setWrapStyleWord(true);
+		consoleHistoryArea.setBackground(new Color(15, 18, 22));
+		consoleHistoryArea.setForeground(new Color(134, 239, 172));
+		consoleHistoryArea.setCaretColor(new Color(134, 239, 172));
+		consoleHistoryArea.setFont(new java.awt.Font(java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 12));
+		JScrollPane consoleScroll = new JScrollPane(consoleHistoryArea);
 
 		consoleHistoryArea = new JTextArea();
 		consoleHistoryArea.setEditable(false);
@@ -184,26 +198,22 @@ public final class TimeseriesWindow {
 
 		commandField = new JTextField();
 		commandField.addActionListener(e -> executeConsoleCommand(commandField.getText()));
+		commandField.setBackground(new Color(15, 18, 22));
+		commandField.setForeground(new Color(134, 239, 172));
+		commandField.setCaretColor(new Color(134, 239, 172));
 		JPanel cmdRow = new JPanel(new BorderLayout(4, 4));
-		cmdRow.add(new JLabel(">"), BorderLayout.WEST);
+		cmdRow.add(new JLabel("$"), BorderLayout.WEST);
 		cmdRow.add(commandField, BorderLayout.CENTER);
 
 		JPanel commandPanel = new JPanel(new BorderLayout(4, 4));
 		commandPanel.add(new JLabel("Console"), BorderLayout.NORTH);
 		commandPanel.add(consoleScroll, BorderLayout.CENTER);
 		commandPanel.add(cmdRow, BorderLayout.SOUTH);
-		gbc.fill = GridBagConstraints.BOTH;
-		gbc.weighty = 1;
-		controlsPanel.add(new JPanel(), gbc);
-
 
 		chartPanel = new ChartPanel(chart);
 		chartPanel.setMouseWheelEnabled(true);
 		chartPanel.setMouseZoomable(true, false);
-		JSplitPane messagesConsoleSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, messagesPanel, commandPanel);
-		messagesConsoleSplit.setResizeWeight(0.5);
-		messagesConsoleSplit.setContinuousLayout(true);
-		JSplitPane chartWithConsoleSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chartPanel, messagesConsoleSplit);
+		JSplitPane chartWithConsoleSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chartPanel, commandPanel);
 		chartWithConsoleSplit.setResizeWeight(0.67);
 		chartWithConsoleSplit.setContinuousLayout(true);
 		JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, controlsPanel, chartWithConsoleSplit);
@@ -230,6 +240,7 @@ public final class TimeseriesWindow {
 		plot.setRenderer(renderer);
 		dialog.setTitle("Vista " + activeType);
 		dialog.setVisible(true);
+		commandField.requestFocusInWindow();
 		appendLog("Aperta vista " + activeType + " per sottobacino " + String.valueOf(subbasinId) + ".");
 		appendLog("Console pronta. Digita help per i comandi.");
 		addSelectedSeriesFromSimulationCombo();
