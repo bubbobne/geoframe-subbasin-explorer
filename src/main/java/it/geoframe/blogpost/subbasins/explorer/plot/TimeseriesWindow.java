@@ -63,7 +63,6 @@ import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 
 public final class TimeseriesWindow {
-	private static final String STREAM_GAUGE_PREFIX = "stream gauge";
 	private static final String DATE_FMT = "yyyy-MM-dd";
 	private static final String CONSOLE_PROMPT = "$ ";
 	private final ProjectConfig config;
@@ -89,7 +88,7 @@ public final class TimeseriesWindow {
 	private final JPanel modeControlsContainer;
 	private final ChartPanel chartPanel;
 	private int consoleInputStart = 0;
-
+	private String streamGaugePrefix;
 
 	public TimeseriesWindow(Component parent, ProjectConfig config, TimeseriesLoader loader,
 			Supplier<List<String>> tableSupplier, Supplier<List<String>> basinSupplier,
@@ -221,7 +220,6 @@ public final class TimeseriesWindow {
 		commandPanel.add(new JLabel("Console"), BorderLayout.NORTH);
 		commandPanel.add(consoleScroll, BorderLayout.CENTER);
 
-
 		chartPanel = new ChartPanel(chart);
 		chartPanel.setMouseWheelEnabled(true);
 		chartPanel.setMouseZoomable(true, false);
@@ -234,6 +232,8 @@ public final class TimeseriesWindow {
 		dialog.setSize(new Dimension(1240, 760));
 		dialog.setLocationRelativeTo(parent);
 		appendConsolePrompt();
+		streamGaugePrefix = cfg("tables.geopackage.sgdata.prefix", "observed_discharge");
+
 	}
 
 	public void showForSelection(String subbasinId, String firstTable, String type) {
@@ -310,16 +310,17 @@ public final class TimeseriesWindow {
 	}
 
 	private void reloadCombos() {
-		simulationTableCombo.removeAllItems();
-		for (String table : filterSimulationTables(tableSupplier.get())) {
-			simulationTableCombo.addItem(table);
-		}
-		basinCombo.removeAllItems();
-		for (String id : basinSupplier.get()) {
-			basinCombo.addItem(id);
-		}
-		streamGaugeCombo.removeAllItems();
-		if (config.mode() == ProjectMode.GEOPACKAGE && streamGaugeSelectionSupplier.getAsBoolean()) {
+		if (config.mode() == ProjectMode.GEOPACKAGE) {
+			simulationTableCombo.removeAllItems();
+			for (String table : filterSimulationTables(tableSupplier.get())) {
+				simulationTableCombo.addItem(table);
+			}
+			basinCombo.removeAllItems();
+			for (String id : basinSupplier.get()) {
+				basinCombo.addItem(id);
+			}
+			streamGaugeCombo.removeAllItems();
+
 			for (String table : filterStreamGaugeTables(tableSupplier.get())) {
 				streamGaugeCombo.addItem(table);
 			}
@@ -357,12 +358,15 @@ public final class TimeseriesWindow {
 			if (table == null) {
 				continue;
 			}
-			Set<String> cols = loader.listColumnNamesFromAnyInput(config, table);
-			boolean hasTs = hasColumn(cols, "ts", "timestamp", "time", "date");
-			boolean hasValue = hasColumn(cols, "value", "obs", "measured");
-			boolean hasSimColumn = hasColumn(cols, "sim", "simulated", "simulation", "discharge_sim");
-			if (hasTs && hasValue && !hasSimColumn) {
-				filtered.add(table);
+			String lower = table.toLowerCase(Locale.ROOT);
+			boolean isObserved = lower.startsWith(streamGaugePrefix);
+			if (isObserved) {
+				Set<String> cols = loader.listColumnNamesFromAnyInput(config, table);
+				boolean hasTs = hasColumn(cols, "ts", "timestamp", "time", "date");
+				boolean hasValue = hasColumn(cols, "value", "obs", "measured");
+				if (hasTs && hasValue) {
+					filtered.add(table);
+				}
 			}
 		}
 		return filtered;
@@ -449,8 +453,7 @@ public final class TimeseriesWindow {
 			return;
 		}
 		List<TimeseriesLoader.TimeValueRow> rows = loader.loadRowsFromAnyInput(config, table, basinId,
-				cfg("charts.state.columns.swe", "swe"),
-				cfg("charts.state.columns.rootzone_aet", "rootzone_aet"),
+				cfg("charts.state.columns.swe", "swe"), cfg("charts.state.columns.rootzone_aet", "rootzone_aet"),
 				cfg("charts.state.columns.canopy_aet", "canopy_aet"),
 				cfg("charts.state.columns.canopy_final", "canopy_final"),
 				cfg("charts.state.columns.canopy_initial", "canopy_initial"),
@@ -482,11 +485,16 @@ public final class TimeseriesWindow {
 		for (StateSeriesCalculator.StatePoint row : aggregated) {
 			Date date = new Date(row.timestamp());
 			stateDataset.add(new Millisecond(date), row.sweDelta(), cfg("charts.state.labels.swe", "swe"));
-			stateDataset.add(new Millisecond(date), row.aetDelta(), cfg("charts.state.labels.aet_sum", "rootzone_aet + canopy_aet"));
-			stateDataset.add(new Millisecond(date), row.canopyDelta(), cfg("charts.state.labels.canopy_delta", "canopy_final - canopy_initial"));
-			stateDataset.add(new Millisecond(date), row.rootzoneDelta(), cfg("charts.state.labels.rootzone_delta", "rootzone_final - rootzone_initial"));
-			stateDataset.add(new Millisecond(date), row.runoffDelta(), cfg("charts.state.labels.runoff_delta", "runoff_final - runoff_initial"));
-			stateDataset.add(new Millisecond(date), row.groundDelta(), cfg("charts.state.labels.ground_delta", "ground_final - ground_initial"));
+			stateDataset.add(new Millisecond(date), row.aetDelta(),
+					cfg("charts.state.labels.aet_sum", "rootzone_aet + canopy_aet"));
+			stateDataset.add(new Millisecond(date), row.canopyDelta(),
+					cfg("charts.state.labels.canopy_delta", "canopy_final - canopy_initial"));
+			stateDataset.add(new Millisecond(date), row.rootzoneDelta(),
+					cfg("charts.state.labels.rootzone_delta", "rootzone_final - rootzone_initial"));
+			stateDataset.add(new Millisecond(date), row.runoffDelta(),
+					cfg("charts.state.labels.runoff_delta", "runoff_final - runoff_initial"));
+			stateDataset.add(new Millisecond(date), row.groundDelta(),
+					cfg("charts.state.labels.ground_delta", "ground_final - ground_initial"));
 		}
 		plot.setDataset(stateDataset);
 		plot.setRenderer(stackedRenderer);
@@ -515,9 +523,6 @@ public final class TimeseriesWindow {
 		}
 	}
 
-
-
-
 	private List<StatePoint> aggregateStatePoints(List<StatePoint> points, String aggregation) {
 		if (points.isEmpty()) {
 			return List.of();
@@ -527,8 +532,8 @@ public final class TimeseriesWindow {
 			long keyTs = bucketStart(p.timestamp(), aggregation);
 			StatePoint current = aggregated.get(keyTs);
 			if (current == null) {
-				aggregated.put(keyTs, new StatePoint(keyTs, p.sweDelta(), p.aetDelta(), p.canopyDelta(), p.rootzoneDelta(),
-						p.runoffDelta(), p.groundDelta()));
+				aggregated.put(keyTs, new StatePoint(keyTs, p.sweDelta(), p.aetDelta(), p.canopyDelta(),
+						p.rootzoneDelta(), p.runoffDelta(), p.groundDelta()));
 			} else {
 				aggregated.put(keyTs,
 						new StatePoint(keyTs, current.sweDelta() + p.sweDelta(), current.aetDelta() + p.aetDelta(),
@@ -563,10 +568,6 @@ public final class TimeseriesWindow {
 		return firstMonthDay.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
 	}
 
-
-
-	
-
 	private void addLineSeries(List<TimeseriesLoader.TimeValueRow> rows, String key, String label, Color color) {
 		TimeSeries series = new TimeSeries(label);
 		for (TimeseriesLoader.TimeValueRow row : rows) {
@@ -579,7 +580,8 @@ public final class TimeseriesWindow {
 		renderer.setSeriesPaint(dataset.getSeriesCount() - 1, color);
 	}
 
-	private void addSummedLineSeries(List<TimeseriesLoader.TimeValueRow> rows, String label, String[] keys, Color color) {
+	private void addSummedLineSeries(List<TimeseriesLoader.TimeValueRow> rows, String label, String[] keys,
+			Color color) {
 		TimeSeries series = new TimeSeries(label);
 		for (TimeseriesLoader.TimeValueRow row : rows) {
 			double sum = 0d;
@@ -609,7 +611,7 @@ public final class TimeseriesWindow {
 	}
 
 	private void addSelectedSeriesFromGaugeCombo() {
-		if (config.mode() != ProjectMode.GEOPACKAGE || !streamGaugeSelectionSupplier.getAsBoolean()) {
+		if (config.mode() != ProjectMode.GEOPACKAGE) {
 			appendLog("Stream gauge non disponibile per la selezione corrente.");
 			return;
 		}
@@ -619,13 +621,13 @@ public final class TimeseriesWindow {
 
 	private void addSeries(String table, boolean isGaugeSeries) {
 		String basinId = (String) basinCombo.getSelectedItem();
-		if (table == null || basinId == null) {
+		if (table == null || (basinId == null && !isGaugeSeries)) {
 			appendLog("Seleziona tabella e sottobacino.");
 			return;
 		}
-		String labelPrefix = isGaugeSeries ? STREAM_GAUGE_PREFIX : table;
+		String labelPrefix = isGaugeSeries ? streamGaugePrefix : table;
 		TimeSeries series = new TimeSeries(labelPrefix + " | basin " + basinId);
-		int count = loader.fillSeriesFromAnyInput(config, table, basinId, series);
+		int count = loader.fillSeriesFromAnyInput(config, table, basinId, series, isGaugeSeries);
 		if (count <= 0) {
 			appendLog("Nessun dato trovato per tabella " + table + " e basin " + basinId + ".");
 			return;
@@ -759,9 +761,8 @@ public final class TimeseriesWindow {
 			appendLog("Metriche non calcolabili: servono dati in comune nel periodo selezionato.");
 			return;
 		}
-		appendLog(String.format(Locale.ROOT,
-				"Metriche [%s vs %s] -> KGE=%.4f, NSE=%.4f, NSElog=%.4f", sim.getKey(), gauge.getKey(), metrics[0],
-				metrics[1], metrics[2]));
+		appendLog(String.format(Locale.ROOT, "Metriche [%s vs %s] -> KGE=%.4f, NSE=%.4f, NSElog=%.4f", sim.getKey(),
+				gauge.getKey(), metrics[0], metrics[1], metrics[2]));
 	}
 
 	private double[] computeMetrics(TimeSeries simulated, TimeSeries observed, Long from, Long to) {
@@ -782,7 +783,7 @@ public final class TimeseriesWindow {
 			}
 			double sim = simN.doubleValue();
 			double obs = obsItem.getValue().doubleValue();
-			if (Double.isFinite(sim) && Double.isFinite(obs)) {
+			if (Double.isFinite(sim) && Double.isFinite(obs) && sim != -9999.0 && obs != -9999.0) {
 				simValues.add(sim);
 				obsValues.add(obs);
 			}
@@ -903,7 +904,7 @@ public final class TimeseriesWindow {
 	}
 
 	private boolean isGaugeSeries(TimeSeries series) {
-		return series != null && series.getKey().toString().toLowerCase(Locale.ROOT).startsWith(STREAM_GAUGE_PREFIX);
+		return series != null && series.getKey().toString().toLowerCase(Locale.ROOT).startsWith(streamGaugePrefix);
 	}
 
 	private String[] seriesKeys(List<TimeSeries> series) {
@@ -965,7 +966,6 @@ public final class TimeseriesWindow {
 		}
 		return new long[] { min, max };
 	}
-
 
 	private void executeConsoleCommand(String commandLine) {
 		String raw = commandLine == null ? "" : commandLine.trim();
@@ -1158,9 +1158,9 @@ public final class TimeseriesWindow {
 		}
 
 		TimeSeries simulated = new TimeSeries(simulatedTable + " | basin " + subbasinId);
-		TimeSeries observed = new TimeSeries(STREAM_GAUGE_PREFIX + " " + observedTable + " | basin " + subbasinId);
-		int simCount = loader.fillSeriesFromAnyInput(config, simulatedTable, subbasinId, simulated);
-		int obsCount = loader.fillSeriesFromAnyInput(config, observedTable, subbasinId, observed);
+		TimeSeries observed = new TimeSeries(streamGaugePrefix + " " + observedTable + " | basin " + subbasinId);
+		int simCount = loader.fillSeriesFromAnyInput(config, simulatedTable, subbasinId, simulated, false);
+		int obsCount = loader.fillSeriesFromAnyInput(config, observedTable, subbasinId, observed, true);
 		if (simCount <= 0) {
 			appendConsoleLine("Nessun dato simulato trovato in " + simulatedTable + " per basin " + subbasinId + ".");
 			return;
@@ -1174,11 +1174,9 @@ public final class TimeseriesWindow {
 			appendConsoleLine("Metriche non calcolabili: servono dati in comune nel periodo selezionato.");
 			return;
 		}
-		appendConsoleLine(String.format(Locale.ROOT,
-				"Metriche [%s/%s vs %s/%s] -> KGE=%.4f, NSE=%.4f, NSElog=%.4f", simulatedTable, subbasinId,
-				observedTable, subbasinId, metrics[0], metrics[1], metrics[2]));
+		appendConsoleLine(String.format(Locale.ROOT, "Metriche [%s/%s vs %s/%s] -> KGE=%.4f, NSE=%.4f, NSElog=%.4f",
+				simulatedTable, subbasinId, observedTable, subbasinId, metrics[0], metrics[1], metrics[2]));
 	}
-
 
 	private void appendLog(String message) {
 		messageArea.append("> " + message + "\n");

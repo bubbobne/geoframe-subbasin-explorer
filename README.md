@@ -164,6 +164,7 @@ Default keys:
 - `tables.geopackage.network`
 - `tables.geopackage.topology.prefix`
 - `tables.geopackage.simulation.prefix`
+- `tables.geopackage.sgdata.prefix`
 - `charts.state.aggregation.options`
 - `charts.state.aggregation.default`
 - `charts.fluxes.columns.*`
@@ -225,8 +226,8 @@ Examples:
 
 - [x] GeoPackage loader and attribute mapping
 - [x] Interactive basin view (pan / zoom / selection)
-- [ ] Time series plotting (Qsim vs Qobs)
-- [ ] States visualization (bar charts, snapshots)
+- [X] Time series plotting (Qsim vs Qobs)
+- [ ] States visualization (bar charts, snapshots) -- in progress
 - [ ] Water balance summaries
 - [ ] Export plots and tables
 - [ ] Performance improvements and caching

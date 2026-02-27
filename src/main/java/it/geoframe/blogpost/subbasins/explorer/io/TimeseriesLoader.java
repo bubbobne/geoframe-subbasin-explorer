@@ -42,12 +42,13 @@ public final class TimeseriesLoader {
 		return out;
 	}
 
-	public int fillSeriesFromAnyInput(ProjectConfig config, String table, String basinId, TimeSeries series) {
-		int count = fillSeriesFromDb(config.geopackagePath(), table, basinId, series);
+	public int fillSeriesFromAnyInput(ProjectConfig config, String table, String basinId, TimeSeries series,
+			boolean isGaugeSeries) {
+		int count = fillSeriesFromDb(config.geopackagePath(), table, basinId, series, isGaugeSeries);
 		if (count > 0) {
 			return count;
 		}
-		return fillSeriesFromDb(config.sqlitePath(), table, basinId, series);
+		return fillSeriesFromDb(config.sqlitePath(), table, basinId, series, isGaugeSeries);
 	}
 
 	public Set<String> listColumnNamesFromAnyInput(ProjectConfig config, String table) {
@@ -59,7 +60,6 @@ public final class TimeseriesLoader {
 		out.addAll(repository.listColumnNames(config.sqlitePath(), table));
 		return out;
 	}
-
 
 	public List<TableColumnDetail> listTableDetailsFromAnyInput(ProjectConfig config, String table) {
 		if (config == null || table == null || table.isBlank()) {
@@ -81,8 +81,8 @@ public final class TimeseriesLoader {
 		return loadRowsFromDb(config.sqlitePath(), table, basinId, valueColumns);
 	}
 
-	private int fillSeriesFromDb(Path dbPath, String table, String basinId, TimeSeries series) {
-		if (dbPath == null || table == null || basinId == null) {
+	private int fillSeriesFromDb(Path dbPath, String table, String basinId, TimeSeries series, boolean isGaugeSerie) {
+		if (dbPath == null || table == null || (basinId == null && !isGaugeSerie)) {
 			return 0;
 		}
 
@@ -90,24 +90,32 @@ public final class TimeseriesLoader {
 		Optional<String> basinColumn = repository.findFirstColumnIgnoreCase(columns,
 				ExplorerConfig.timeseriesBasinIdCandidates());
 		Optional<String> tsColumn = repository.findFirstColumnIgnoreCase(columns,
-				new String[] { ExplorerConfig.timeseriesTimestampColumn(), "timestamp", "date", "time" });
+				new String[] { ExplorerConfig.timeseriesTimestampColumn(), "ts", "timestamp", "date", "time" });
 		Optional<String> valueColumn = repository.findFirstColumnIgnoreCase(columns,
-				new String[] { ExplorerConfig.timeseriesValueColumn(), "simulated", "obs", "q" });
-		if (basinColumn.isEmpty() || tsColumn.isEmpty() || valueColumn.isEmpty()) {
+				new String[] { ExplorerConfig.timeseriesValueColumn(), "value", "simulated", "obs", "q" });
+		if ((!isGaugeSerie && basinColumn.isEmpty()) || tsColumn.isEmpty() || valueColumn.isEmpty()) {
 			return 0;
 		}
 
 		String safeTable = table.replace("\"", "\"\"");
-		String sql = "SELECT \"" + tsColumn.get() + "\", \"" + valueColumn.get() + "\" FROM \"" + safeTable
-				+ "\" WHERE \"" + basinColumn.get() + "\"=? ORDER BY \"" + tsColumn.get() + "\"";
+		String sql = "SELECT \"" + tsColumn.get() + "\", \"" + valueColumn.get() + "\" FROM \"" + safeTable + "\"";
+		if (!isGaugeSerie) {
+			sql = sql + " WHERE \"" + basinColumn.get() + "\"=?";
+		}
+		sql = sql + " ORDER BY \"" + tsColumn.get() + "\"";
 		try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
 				PreparedStatement ps = c.prepareStatement(sql)) {
-			ps.setString(1, basinId);
+			if (!isGaugeSerie) {
+				ps.setString(1, basinId);
+			}
 			int count = 0;
 			try (ResultSet rs = ps.executeQuery()) {
 				while (rs.next()) {
 					long ts = rs.getLong(1);
 					double value = rs.getDouble(2);
+					if (value == -9999.0) {
+						value = Double.NaN;
+					}
 					if (!rs.wasNull()) {
 						series.addOrUpdate(new Millisecond(new java.util.Date(ts)), value);
 						count++;

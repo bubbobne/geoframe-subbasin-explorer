@@ -598,6 +598,7 @@ public final class SubbasinExplorerPanel extends JPanel {
 	}
 
 	private boolean isSelectedSubbasinStreamGauge() {
+		//@todo if the feature taht I select contains (as outlet) a stream gauge then open directly the strem gauge 
 		if (subbasinSource == null || selectedFeatureId == null) {
 			return false;
 		}

@@ -45,6 +45,10 @@ public final class ExplorerConfig {
 	public static String geopackageSimulationPrefix() {
 		return get("tables.geopackage.simulation.prefix", "sim");
 	}
+	
+	public static String geopackageStreamGaugeDataPrefix() {
+		return get("tables.geopackage.sgdata.prefix", "observed_discharge");
+	}
 
 	public static String timeseriesTimestampColumn() {
 		return get("tables.timeseries.columns.timestamp", "ts");
