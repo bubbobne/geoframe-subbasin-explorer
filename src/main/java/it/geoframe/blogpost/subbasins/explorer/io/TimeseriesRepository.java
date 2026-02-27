@@ -17,6 +17,9 @@ import java.util.Set;
  * Repository dedicated to time-series table discovery and extraction.
  */
 public final class TimeseriesRepository {
+	public record TableColumnDetail(int ordinalPosition, String name, String type, boolean notNull,
+			String defaultValue, boolean primaryKey) {
+	}
 
 	public List<String> listTables(Path dbPath) {
 		if (dbPath == null) {
@@ -75,5 +78,25 @@ public final class TimeseriesRepository {
 			}
 		}
 		return Optional.empty();
+	}
+
+	public List<TableColumnDetail> listTableDetails(Path dbPath, String tableName) {
+		if (dbPath == null || tableName == null || tableName.isBlank()) {
+			return List.of();
+		}
+		String safeTable = tableName.replace("\"", "\"\"");
+		String sql = "PRAGMA table_info(\"" + safeTable + "\")";
+		List<TableColumnDetail> out = new ArrayList<>();
+		try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
+				PreparedStatement ps = c.prepareStatement(sql);
+				ResultSet rs = ps.executeQuery()) {
+			while (rs.next()) {
+				out.add(new TableColumnDetail(rs.getInt("cid") + 1, rs.getString("name"), rs.getString("type"),
+						rs.getInt("notnull") == 1, rs.getString("dflt_value"), rs.getInt("pk") == 1));
+			}
+		} catch (SQLException ignored) {
+			return List.of();
+		}
+		return out;
 	}
 }
