@@ -152,6 +152,16 @@ Configurable keys in `explorer.properties`:
 - `legacy.files.topology.csv`
 - `legacy.timeseries.prefixes`
 
+Default value for `legacy.timeseries.prefixes` (legacy flux/state components):
+- `C_AET_`, `C_S_`, `C_Throughfall_`, `freezing_`, `GW_S_`, `Md_`, `melting_`,
+  `Q_`, `Q_fast_`, `Q_slow_`, `Q_mm_`, `Q_fast_mm_`, `Q_slow_mm_`, `RZ_AET_`, `RZ_S_`, `SWE_`
+
+How prefixes are used:
+- prefixes are **comma-separated alternatives**;
+- for each subbasin folder `<id>/`, validator looks for files named `<prefix><id>.csv`;
+- files are checked independently (you do **not** need all prefixes for every subbasin);
+- at least one matching/parseable CSV per folder is enough to pass the legacy timeseries check.
+
 ---
 
 ## Usage workflow
