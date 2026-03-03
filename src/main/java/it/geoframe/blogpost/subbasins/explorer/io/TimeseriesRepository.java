@@ -15,6 +15,9 @@ import java.util.Set;
 
 /**
  * Repository dedicated to time-series table discovery and extraction.
+ * 
+ * @author Daniele Andreis
+ *
  */
 public final class TimeseriesRepository {
 	public record TableColumnDetail(int ordinalPosition, String name, String type, boolean notNull,

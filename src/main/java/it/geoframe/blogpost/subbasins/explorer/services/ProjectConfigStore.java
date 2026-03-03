@@ -5,7 +5,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.prefs.Preferences;
-
+/**
+ * @author Daniele Andreis
+ */
 public final class ProjectConfigStore {
 	private static final Preferences P = Preferences.userRoot().node("it/geoframe/subbasins-explorer");
 

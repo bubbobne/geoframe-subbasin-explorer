@@ -14,6 +14,11 @@ import javax.swing.UIManager;
 import it.geoframe.blogpost.subbasins.explorer.ui.MainFrame;
 import it.geoframe.blogpost.subbasins.explorer.ui.SplashScreen;
 
+/**
+ * This is the entry point for the rainfall-runoff viewer.
+ * 
+ * @author Daniele Andreis
+ */
 public final class Main {
 
 	private Main() {
@@ -22,11 +27,10 @@ public final class Main {
 	public static void main(String[] args) {
 		SwingUtilities.invokeLater(() -> {
 			setSystemLookAndFeelQuietly();
-
 			final String version = readVersionOrFallback("0.1.0-SNAPSHOT");
 			final String author = "by Daniele Andreis";
 			final String license = "GPL-3.0-only";
-
+			
 			final SplashScreen splash = new SplashScreen(version, author, license);
 			splash.setVisible(true);
 			final JWindow splashWindow = new JWindow();
@@ -43,7 +47,8 @@ public final class Main {
 					publish("Starting…");
 					publish("Loading UI resources…");
 					splash.setProgress(40);
-					Thread.sleep(1500); // placeholder (rimuovi quando hai init reali)
+					Thread.sleep(1500);
+					//maybe put some hints
 					publish("Initializing GeoTools…");
 					Thread.sleep(2000);
 					splash.setProgress(80);

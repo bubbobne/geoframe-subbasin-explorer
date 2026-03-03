@@ -14,6 +14,11 @@ import java.util.Properties;
  * 1) explicit path via -Dgeoframe.explorer.config=/path/to/explorer.properties
  * 2) ~/.geoframe-subbasins-explorer/explorer.properties
  * 3) classpath resource explorer.properties
+ * 
+ * 
+ * 
+ * @author Daniele Andreis
+ *
  */
 public final class ExplorerConfig {
 

@@ -32,19 +32,26 @@ public class SplashScreen extends JPanel {
 		setLicense(license);
 	}
 
-	// ---------- Public API (Controller-friendly) ----------
 
-	public void setTitle(String title) {
+	private void setTitle(String title) {
 		m_titleLabel.setText(Objects.requireNonNullElse(title, ""));
 	}
 
-	public void setVersion(String version) {
+	private void setVersion(String version) {
 		m_versionLabel.setText(Objects.requireNonNullElse(version, ""));
 	}
 
-	public void setStatus(String status) {
-		m_statusLabel.setText(Objects.requireNonNullElse(status, ""));
+
+	private void setAuthor(String author) {
+		m_authorLabel.setText(Objects.requireNonNullElse(author, ""));
 	}
+
+	private void setLicense(String license) {
+		m_licenseLabel.setText(Objects.requireNonNullElse(license, ""));
+	}
+
+	
+	// ---------- Public API (Controller-friendly) ----------
 
 	/** 0..100 */
 	public void setProgress(int percent) {
@@ -54,14 +61,10 @@ public class SplashScreen extends JPanel {
 		m_progressBar.setString(p + "%");
 	}
 
-	public void setAuthor(String author) {
-		m_authorLabel.setText(Objects.requireNonNullElse(author, ""));
+	public void setStatus(String status) {
+		m_statusLabel.setText(Objects.requireNonNullElse(status, ""));
 	}
-
-	public void setLicense(String license) {
-		m_licenseLabel.setText(Objects.requireNonNullElse(license, ""));
-	}
-
+	
 	// ---------- UI building ----------
 
 	protected void initializePanel() {
@@ -74,9 +77,7 @@ public class SplashScreen extends JPanel {
 	private JPanel createPanel() {
 		JPanel p = new JPanel();
 		p.setBackground(Color.WHITE);
-
-		// Responsive layout: no huge PX constants
-		FormLayout layout = new FormLayout("pref:grow", // single column, grows
+		FormLayout layout = new FormLayout("pref:grow", 
 				"pref, 10dlu, pref, 8dlu, pref, 6dlu, pref, 10dlu, pref, 6dlu, pref");
 		p.setLayout(layout);
 		CellConstraints cc = new CellConstraints();
@@ -131,7 +132,6 @@ public class SplashScreen extends JPanel {
 		try {
 			var url = getClass().getClassLoader().getResource(pathOnClasspath);
 			if (url == null) {
-				// Non esplodere: splash senza logo è meglio di crash
 				return null;
 			}
 			return new ImageIcon(url);
@@ -140,28 +140,10 @@ public class SplashScreen extends JPanel {
 		}
 	}
 
-	// ---------- Optional: quick manual preview ----------
-	public static void main(String[] args) {
-		SwingUtilities.invokeLater(() -> {
-			JFrame frame = new JFrame("SplashScreen preview");
-			frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-
-			SplashScreen splash = new SplashScreen("Daniele Andreis", "1.0", "GPL3");
-			splash.setStatus("Loading UI…");
-			splash.setProgress(35);
-
-			frame.setContentPane(splash);
-			frame.pack();
-			frame.setSize(new Dimension(640, 420));
-			frame.setLocationRelativeTo(null);
-			frame.setVisible(true);
-		});
-	}
-
+	
 	public void disposeWindowAncestor() {
 		var w = SwingUtilities.getWindowAncestor(this);
 		if (w != null) {
-			w.setVisible(false);
 			w.dispose();
 		}
 	}

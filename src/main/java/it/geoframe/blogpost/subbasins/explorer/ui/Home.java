@@ -10,9 +10,11 @@ import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import javax.swing.JPanel;
 import java.awt.BorderLayout;
 
+
+/**
+ * @author Daniele Andreis
+ */
 public final class Home extends JPanel {
-
-
 
 	public Home(ProjectConfig config, String version) {
 		super(new BorderLayout());

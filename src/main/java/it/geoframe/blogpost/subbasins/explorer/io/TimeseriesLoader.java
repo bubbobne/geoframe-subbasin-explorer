@@ -29,7 +29,9 @@ import org.jfree.data.time.TimeSeries;
 
 import it.geoframe.blogpost.subbasins.explorer.services.ExplorerConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
-
+/**
+ * @author Daniele Andreis
+ */
 public final class TimeseriesLoader {
 	public record TimeValueRow(long timestamp, Map<String, Double> values) {
 	}
