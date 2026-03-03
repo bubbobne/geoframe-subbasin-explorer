@@ -7,6 +7,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -69,7 +70,6 @@ import org.locationtech.jts.geom.MultiLineString;
 
 import it.geoframe.blogpost.subbasins.explorer.services.ExplorerConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
-import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfigStore;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectValidator;
 import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesLoader;
@@ -317,9 +317,18 @@ public final class SubbasinExplorerPanel extends JPanel {
 	}
 
 	private Optional<SimpleFeatureSource> loadLegacySource() throws IOException {
+		if (config == null || config.legacyRootPath() == null) {
+			return Optional.empty();
+		}
+		String subbasinShp = (config.legacySubbasinsShpName() == null || config.legacySubbasinsShpName().isBlank())
+				? ExplorerConfig.legacySubbasinsShapefile()
+				: config.legacySubbasinsShpName();
+		Path shpPath = config.legacyRootPath().resolve(subbasinShp);
+		if (!java.nio.file.Files.exists(shpPath)) {
+			return Optional.empty();
+		}
 		Map<String, Object> params = new HashMap<>();
-		ProjectConfigStore.load().ifPresent(cfg -> params.put("database", cfg.legacyRootPath().toString()));
-
+		params.put("url", shpPath.toUri().toURL());
 		dataStore = DataStoreFinder.getDataStore(params);
 		if (dataStore == null) {
 			return Optional.empty();
@@ -352,7 +361,34 @@ public final class SubbasinExplorerPanel extends JPanel {
 	}
 
 	private SimpleFeatureSource loadNetworkSource() throws IOException {
-		if (dataStore == null || config == null || config.mode() != ProjectMode.GEOPACKAGE) {
+		if (config == null) {
+			return null;
+		}
+		if (config.mode() == ProjectMode.LEGACY_FOLDER) {
+			if (config.legacyRootPath() == null) {
+				return null;
+			}
+			String networkShp = (config.legacyNetworkShpName() == null || config.legacyNetworkShpName().isBlank())
+					? ExplorerConfig.legacyNetworkShapefile()
+					: config.legacyNetworkShpName();
+			Path shpPath = config.legacyRootPath().resolve(networkShp);
+			if (!java.nio.file.Files.exists(shpPath)) {
+				return null;
+			}
+			Map<String, Object> params = new HashMap<>();
+			params.put("url", shpPath.toUri().toURL());
+			DataStore networkStore = DataStoreFinder.getDataStore(params);
+			if (networkStore == null) {
+				return null;
+			}
+			String[] typeNames = networkStore.getTypeNames();
+			if (typeNames == null || typeNames.length == 0) {
+				return null;
+			}
+			return networkStore.getFeatureSource(typeNames[0]);
+		}
+
+		if (dataStore == null) {
 			return null;
 		}
 		String[] typeNames = dataStore.getTypeNames();
@@ -576,6 +612,13 @@ public final class SubbasinExplorerPanel extends JPanel {
 	}
 
 	private String extractSubbasinId(SimpleFeature feature) {
+		if (config != null && config.mode() == ProjectMode.LEGACY_FOLDER && config.legacyShpIdField() != null
+				&& !config.legacyShpIdField().isBlank()) {
+			Object configured = feature.getAttribute(config.legacyShpIdField());
+			if (configured != null) {
+				return String.valueOf(configured);
+			}
+		}
 		Object value = feature.getAttribute("basin_id");
 		if (value == null) {
 			value = feature.getAttribute("basinid");

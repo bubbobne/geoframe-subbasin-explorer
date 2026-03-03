@@ -89,6 +89,10 @@ public final class TimeseriesWindow {
 	private final ChartPanel chartPanel;
 	private int consoleInputStart = 0;
 	private String streamGaugePrefix;
+	private String legacyDischargePrefix;
+	private String legacyStreamGaugePrefix;
+	private JLabel addSourceLabel;
+	private JButton addSimulationButton;
 
 	public TimeseriesWindow(Component parent, ProjectConfig config, TimeseriesLoader loader,
 			Supplier<List<String>> tableSupplier, Supplier<List<String>> basinSupplier,
@@ -134,7 +138,8 @@ public final class TimeseriesWindow {
 		seriesList.setVisibleRowCount(6);
 		seriesList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-		controlsPanel.add(new JLabel("Tabella da aggiungere:"), gbc);
+		addSourceLabel = new JLabel("Tabella da aggiungere:");
+		controlsPanel.add(addSourceLabel, gbc);
 		gbc.gridy++;
 		controlsPanel.add(simulationTableCombo, gbc);
 		gbc.gridy++;
@@ -142,7 +147,7 @@ public final class TimeseriesWindow {
 		gbc.gridy++;
 		controlsPanel.add(basinCombo, gbc);
 		gbc.gridy++;
-		JButton addSimulationButton = new JButton("Carica simulazione");
+		addSimulationButton = new JButton("Carica simulazione");
 		addSimulationButton.addActionListener(e -> addSelectedSeriesFromSimulationCombo());
 		controlsPanel.add(addSimulationButton, gbc);
 		gbc.gridy++;
@@ -233,6 +238,8 @@ public final class TimeseriesWindow {
 		dialog.setLocationRelativeTo(parent);
 		appendConsolePrompt();
 		streamGaugePrefix = cfg("tables.geopackage.sgdata.prefix", "observed_discharge");
+		legacyDischargePrefix = ExplorerConfig.legacyDischargePrefix();
+		legacyStreamGaugePrefix = ExplorerConfig.legacyStreamGaugePrefix();
 
 	}
 
@@ -311,6 +318,10 @@ public final class TimeseriesWindow {
 
 	private void reloadCombos() {
 		if (config.mode() == ProjectMode.GEOPACKAGE) {
+			addSourceLabel.setText("Tabella da aggiungere:");
+			addSimulationButton.setText("Carica simulazione");
+			simulationTableCombo.setEnabled(true);
+			streamGaugeCombo.setEnabled(true);
 			simulationTableCombo.removeAllItems();
 			for (String table : filterSimulationTables(tableSupplier.get())) {
 				simulationTableCombo.addItem(table);
@@ -320,12 +331,28 @@ public final class TimeseriesWindow {
 				basinCombo.addItem(id);
 			}
 			streamGaugeCombo.removeAllItems();
-
 			for (String table : filterStreamGaugeTables(tableSupplier.get())) {
 				streamGaugeCombo.addItem(table);
 			}
+			return;
 		}
+
+		addSourceLabel.setText("Bacino da aggiungere:");
+		addSimulationButton.setText("Carica bacino");
+		simulationTableCombo.removeAllItems();
+		simulationTableCombo.addItem("legacy-folder");
+		simulationTableCombo.setEnabled(false);
+		basinCombo.removeAllItems();
+		for (String id : basinSupplier.get()) {
+			basinCombo.addItem(id);
+		}
+		streamGaugeCombo.removeAllItems();
+		for (String id : basinSupplier.get()) {
+			streamGaugeCombo.addItem(id);
+		}
+		streamGaugeCombo.setEnabled(true);
 	}
+
 
 	private List<String> filterSimulationTables(List<String> sourceTables) {
 		if (sourceTables == null || sourceTables.isEmpty()) {
@@ -387,6 +414,10 @@ public final class TimeseriesWindow {
 	}
 
 	private void addSelectedSeriesFromSimulationCombo() {
+		if (config.mode() == ProjectMode.LEGACY_FOLDER) {
+			addLegacyBasinSeries(false);
+			return;
+		}
 		String table = (String) simulationTableCombo.getSelectedItem();
 		if ("fluxes".equalsIgnoreCase(activeType)) {
 			addFluxesSeries(table);
@@ -399,7 +430,35 @@ public final class TimeseriesWindow {
 		addSeries(table, false);
 	}
 
+	private void addLegacyBasinSeries(boolean gaugeSeries) {
+		String basinId = gaugeSeries ? (String) streamGaugeCombo.getSelectedItem() : (String) basinCombo.getSelectedItem();
+		if (basinId == null || basinId.isBlank()) {
+			appendLog("Seleziona un bacino.");
+			return;
+		}
+		if (!"discharge".equalsIgnoreCase(activeType)) {
+			appendLog("Legacy mode: al momento è supportato solo il grafico discharge da file.");
+			return;
+		}
+		String prefix = gaugeSeries ? legacyStreamGaugePrefix : legacyDischargePrefix;
+		TimeSeries series = new TimeSeries((gaugeSeries ? "gauge " : "sim ") + prefix + basinId + ".csv");
+		int count = loader.fillSeriesFromLegacyFolder(config, basinId, prefix, series);
+		if (count <= 0) {
+			appendLog("Nessun dato trovato nel file legacy " + prefix + basinId + ".csv per bacino " + basinId + ".");
+			return;
+		}
+		dataset.addSeries(series);
+		applySeriesStyles();
+		reloadSeriesList();
+		appendLog("Aggiunta serie legacy: " + prefix + basinId + ".csv | punti: " + count);
+	}
+
+
 	private void addFluxesSeries(String table) {
+		if (config.mode() == ProjectMode.LEGACY_FOLDER) {
+			appendLog("Legacy mode: fluxes da file non ancora supportato in questa vista.");
+			return;
+		}
 		String basinId = (String) basinCombo.getSelectedItem();
 		if (table == null || basinId == null) {
 			appendLog("Seleziona tabella e sottobacino.");
@@ -447,6 +506,10 @@ public final class TimeseriesWindow {
 	}
 
 	private void addStateSeries(String table) {
+		if (config.mode() == ProjectMode.LEGACY_FOLDER) {
+			appendLog("Legacy mode: state da file non ancora supportato in questa vista.");
+			return;
+		}
 		String basinId = (String) basinCombo.getSelectedItem();
 		if (table == null || basinId == null) {
 			appendLog("Seleziona tabella e sottobacino.");
@@ -611,13 +674,17 @@ public final class TimeseriesWindow {
 	}
 
 	private void addSelectedSeriesFromGaugeCombo() {
+		if (config.mode() == ProjectMode.LEGACY_FOLDER) {
+			addLegacyBasinSeries(true);
+			return;
+		}
 		if (config.mode() != ProjectMode.GEOPACKAGE) {
-			appendLog("Stream gauge non disponibile per la selezione corrente.");
 			return;
 		}
 		String table = (String) streamGaugeCombo.getSelectedItem();
 		addSeries(table, true);
 	}
+
 
 	private void addSeries(String table, boolean isGaugeSeries) {
 		String basinId = (String) basinCombo.getSelectedItem();
@@ -1129,6 +1196,10 @@ public final class TimeseriesWindow {
 	}
 
 	private void computeMetricsFromTables(String[] parts) {
+		if (config.mode() == ProjectMode.LEGACY_FOLDER) {
+			appendConsoleLine("Comando metrics su tabelle non disponibile in legacy mode.");
+			return;
+		}
 		if (parts.length < 4) {
 			appendConsoleLine("Uso: metrics <tabSim> <subbasinId> <tabObs> [dal] [al]");
 			return;
