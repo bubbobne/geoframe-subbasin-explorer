@@ -93,6 +93,14 @@ public final class ExplorerConfig {
 		return get("legacy.files.topology.csv", "topology.csv");
 	}
 
+	public static String legacyDischargePrefix() {
+		return get("legacy.timeseries.discharge.prefix", "Q_");
+	}
+
+	public static String legacyStreamGaugePrefix() {
+		return get("legacy.timeseries.streamgauge.prefix", "Q_");
+	}
+
 	public static String[] legacyTimeseriesPrefixes() {
 		String configured = get("legacy.timeseries.prefixes",
 				"C_AET_,C_S_,C_Throughfall_,freezing_,GW_S_,Md_,melting_,Q_,Q_fast_,Q_slow_,Q_mm_,Q_fast_mm_,Q_slow_mm_,RZ_AET_,RZ_S_,SWE_");

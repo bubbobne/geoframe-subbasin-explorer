@@ -1,18 +1,26 @@
 package it.geoframe.blogpost.subbasins.explorer.io;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TimeZone;
 
 import it.geoframe.blogpost.subbasins.explorer.io.TimeseriesRepository.TableColumnDetail;
 
@@ -49,6 +57,18 @@ public final class TimeseriesLoader {
 			return count;
 		}
 		return fillSeriesFromDb(config.sqlitePath(), table, basinId, series, isGaugeSeries);
+	}
+
+	public int fillSeriesFromLegacyFolder(ProjectConfig config, String basinId, String prefix, TimeSeries series) {
+		if (config == null || config.legacyRootPath() == null || basinId == null || basinId.isBlank() || prefix == null
+				|| prefix.isBlank()) {
+			return 0;
+		}
+		Path csv = config.legacyRootPath().resolve(basinId).resolve(prefix.trim() + basinId + ".csv");
+		if (!Files.exists(csv) || !Files.isReadable(csv)) {
+			return 0;
+		}
+		return fillSeriesFromLegacyCsv(csv, series);
 	}
 
 	public Set<String> listColumnNamesFromAnyInput(ProjectConfig config, String table) {
@@ -125,6 +145,136 @@ public final class TimeseriesLoader {
 			return count;
 		} catch (SQLException ex) {
 			return 0;
+		}
+	}
+
+	private int fillSeriesFromLegacyCsv(Path csvPath, TimeSeries series) {
+		try (BufferedReader reader = Files.newBufferedReader(csvPath)) {
+			LegacyCsvHeader header = LegacyCsvHeader.read(reader);
+			if (header == null) {
+				return 0;
+			}
+			int count = 0;
+			String line;
+			while ((line = reader.readLine()) != null) {
+				if (line.isBlank() || line.startsWith("@")) {
+					continue;
+				}
+				String[] parts = splitLine(line, header.delimiter());
+				if (parts.length <= Math.max(header.timestampIndex(), header.valueIndex())) {
+					continue;
+				}
+				String tsText = parts[header.timestampIndex()].trim();
+				String valueText = parts[header.valueIndex()].trim();
+				if (tsText.isEmpty() || valueText.isEmpty()) {
+					continue;
+				}
+				Long ts = parseTimestamp(tsText, header.dateFormat());
+				if (ts == null) {
+					continue;
+				}
+				double value;
+				try {
+					value = Double.parseDouble(valueText);
+				} catch (NumberFormatException ex) {
+					continue;
+				}
+				series.addOrUpdate(new Millisecond(new Date(ts)), value);
+				count++;
+			}
+			return count;
+		} catch (IOException e) {
+			return 0;
+		}
+	}
+
+	private static Long parseTimestamp(String value, String format) {
+		List<String> formats = new ArrayList<>();
+		if (format != null && !format.isBlank()) {
+			formats.add(format.trim());
+		}
+		formats.add("yyyy-MM-dd HH:mm:ss");
+		formats.add("yyyy-MM-dd HH:mm");
+		formats.add("yyyy-MM-dd");
+		for (String f : formats) {
+			SimpleDateFormat sdf = new SimpleDateFormat(f, Locale.ROOT);
+			sdf.setLenient(false);
+			sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+			try {
+				return sdf.parse(value).getTime();
+			} catch (ParseException ignored) {
+			}
+		}
+		return null;
+	}
+
+	private static String[] splitLine(String line, char delimiter) {
+		return line.split(java.util.regex.Pattern.quote(String.valueOf(delimiter)), -1);
+	}
+
+	private record LegacyCsvHeader(char delimiter, int timestampIndex, int valueIndex, String dateFormat) {
+		static LegacyCsvHeader read(BufferedReader reader) throws IOException {
+			String line;
+			String[] header = null;
+			String format = null;
+			char delimiter = ',';
+			while ((line = reader.readLine()) != null) {
+				String trimmed = line.trim();
+				if (trimmed.isEmpty()) {
+					continue;
+				}
+				if (trimmed.startsWith("@H")) {
+					delimiter = sniffDelimiter(trimmed);
+					String[] cols = splitLine(trimmed, delimiter);
+					header = new String[Math.max(0, cols.length - 1)];
+					for (int i = 1; i < cols.length; i++) {
+						header[i - 1] = cols[i].trim();
+					}
+					continue;
+				}
+				if (trimmed.regionMatches(true, 0, "Format", 0, 6)) {
+					delimiter = sniffDelimiter(trimmed);
+					String[] parts = splitLine(trimmed, delimiter);
+					if (parts.length > 1) {
+						format = parts[1].trim();
+					}
+					continue;
+				}
+				if (!trimmed.startsWith("@")) {
+					delimiter = sniffDelimiter(trimmed);
+					header = splitLine(trimmed, delimiter);
+					for (int i = 0; i < header.length; i++) {
+						header[i] = header[i].trim();
+					}
+					break;
+				}
+			}
+			if (header == null || header.length == 0) {
+				return null;
+			}
+			int tsIdx = indexOfIgnoreCase(header, "timestamp", "ts", "date", "time");
+			int valueIdx = indexOfIgnoreCase(header, "value_1", "value", "q", "simulated", "obs");
+			if (tsIdx < 0 || valueIdx < 0) {
+				return null;
+			}
+			return new LegacyCsvHeader(delimiter, tsIdx, valueIdx, format);
+		}
+
+		private static int indexOfIgnoreCase(String[] values, String... candidates) {
+			for (int i = 0; i < values.length; i++) {
+				for (String c : candidates) {
+					if (values[i] != null && values[i].equalsIgnoreCase(c)) {
+						return i;
+					}
+				}
+			}
+			return -1;
+		}
+
+		private static char sniffDelimiter(String header) {
+			long commas = header.chars().filter(ch -> ch == ',').count();
+			long semicolons = header.chars().filter(ch -> ch == ';').count();
+			return semicolons > commas ? ';' : ',';
 		}
 	}
 
