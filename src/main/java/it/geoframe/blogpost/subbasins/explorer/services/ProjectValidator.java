@@ -291,107 +291,225 @@ public final class ProjectValidator {
 	
 	
 	  private static void checkDirectoryExists(Path p, String label, List<String> info, List<String> errors) {
-	        if (p == null) {
-	            errors.add(label + " path is null.");
-	            return;
-	        }
-	        if (!Files.exists(p)) {
-	            errors.add(label + " folder does not exist: " + p);
-	            return;
-	        }
-	        if (!Files.isDirectory(p)) {
-	            errors.add(label + " is not a folder: " + p);
-	            return;
-	        }
-	        if (!Files.isReadable(p)) {
-	            errors.add(label + " is not readable: " + p);
-	            return;
-	        }
-	        info.add("✅ " + label + " folder found: " + p.getFileName());
-	    }
+        if (p == null) {
+            errors.add(label + " path is null.");
+            return;
+        }
+        if (!Files.exists(p)) {
+            errors.add(label + " folder does not exist: " + p);
+            return;
+        }
+        if (!Files.isDirectory(p)) {
+            errors.add(label + " is not a folder: " + p);
+            return;
+        }
+        if (!Files.isReadable(p)) {
+            errors.add(label + " is not readable: " + p);
+            return;
+        }
+        info.add("✅ " + label + " folder found: " + p.getFileName());
+    }
 
-	    private static void validateLegacyFolder(ProjectConfig cfg, List<String> info, List<String> errors, List<String> warnings) {
-	        info.add("— Checking legacy folder input…");
-	        checkDirectoryExists(cfg.legacyRootPath(), "Legacy root", info, errors);
-	        if (!errors.isEmpty()) return;
+    private static void validateLegacyFolder(ProjectConfig cfg, List<String> info, List<String> errors, List<String> warnings) {
+        info.add("— Checking legacy folder input…");
+        checkDirectoryExists(cfg.legacyRootPath(), "Legacy root", info, errors);
+        if (!errors.isEmpty()) return;
 
-	        Path root = cfg.legacyRootPath();
-	        Path subbasinShp = root.resolve("subbasin_complete.shp");
-	        Path networkShp = root.resolve("network_complete.shp");
-	        Path networkAlt = root.resolve("network_compete.shp");
-	        Path subbasinsCsv = root.resolve("subbasins.csv");
+        Path root = cfg.legacyRootPath();
+        String subbasinsShpName = defaultIfBlank(cfg.legacySubbasinsShpName(), ExplorerConfig.legacySubbasinsShapefile());
+        String networkShpName = defaultIfBlank(cfg.legacyNetworkShpName(), ExplorerConfig.legacyNetworkShapefile());
+        String subbasinsCsvName = defaultIfBlank(cfg.legacySubbasinsCsvName(), ExplorerConfig.legacySubbasinsCsv());
+        String topologyCsvName = defaultIfBlank(cfg.legacyTopologyCsvName(), ExplorerConfig.legacyTopologyCsv());
 
-	        checkFileExists(subbasinShp, "Legacy subbasin shapefile", info, errors);
-	        if (!Files.exists(networkShp) && Files.exists(networkAlt)) {
-	            networkShp = networkAlt;
-	            warnings.add("Legacy network shapefile name 'network_compete.shp' detected (expected 'network_complete.shp').");
-	        }
-	        checkFileExists(networkShp, "Legacy network shapefile", info, errors);
-	        checkFileExists(subbasinsCsv, "Legacy subbasins CSV", info, errors);
+        Path subbasinShp = root.resolve(subbasinsShpName);
+        Path networkShp = root.resolve(networkShpName);
+        Path subbasinsCsv = root.resolve(subbasinsCsvName);
+        Path topologyCsv = root.resolve(topologyCsvName);
 
-	        if (!errors.isEmpty()) return;
+        checkFileExists(subbasinShp, "Legacy subbasin shapefile", info, errors);
+        checkFileExists(networkShp, "Legacy network shapefile", info, errors);
+        checkFileExists(subbasinsCsv, "Legacy subbasins CSV", info, errors);
+        if (Files.exists(topologyCsv)) {
+            checkFileExists(topologyCsv, "Legacy topology CSV", info, errors);
+        } else {
+            warnings.add("Legacy: topology CSV not found (optional): " + topologyCsvName);
+        }
 
-	        if (cfg.legacyShpIdField() == null || cfg.legacyShpIdField().isBlank()) {
-	            errors.add("Legacy: missing subbasin ID field name for shapefile.");
-	        } else {
-	            info.add("✅ Legacy shapefile ID field set: " + cfg.legacyShpIdField());
-	            Path dbf = root.resolve("subbasin_complete.dbf");
-	            if (!Files.exists(dbf)) {
-	                warnings.add("Legacy: 'subbasin_complete.dbf' not found, cannot verify shapefile fields.");
-	            }
-	        }
+        if (!errors.isEmpty()) return;
 
-	        if (cfg.legacyCsvIdColumn() == null || cfg.legacyCsvIdColumn().isBlank()) {
-	            errors.add("Legacy: missing subbasin ID column name for CSV.");
-	        } else {
-	            validateCsvHasColumn(subbasinsCsv, cfg.legacyCsvIdColumn(), info, errors, warnings);
-	        }
+        if (cfg.legacyShpIdField() == null || cfg.legacyShpIdField().isBlank()) {
+            errors.add("Legacy: missing subbasin ID field name for shapefile.");
+        } else {
+            info.add("✅ Legacy shapefile ID field set: " + cfg.legacyShpIdField());
+            Path dbf = toDbfPath(subbasinShp);
+            if (!Files.exists(dbf)) {
+                warnings.add("Legacy: '" + dbf.getFileName() + "' not found, cannot verify shapefile fields.");
+            }
+        }
 
-	        boolean hasSubfolders = hasSubbasinFolders(root);
-	        if (!hasSubfolders) {
-	            warnings.add("Legacy: no subbasin folders found inside root.");
-	        }
-	    }
+        if (cfg.legacyCsvIdColumn() == null || cfg.legacyCsvIdColumn().isBlank()) {
+            errors.add("Legacy: missing subbasin ID column name for CSV.");
+        } else {
+            validateCsvHasColumn(subbasinsCsv, cfg.legacyCsvIdColumn(), info, errors, warnings);
+        }
 
-	    private static void validateCsvHasColumn(Path csvPath, String columnName, List<String> info,
-	                                             List<String> errors, List<String> warnings) {
-	        info.add("— Checking legacy CSV columns…");
-	        try (BufferedReader reader = Files.newBufferedReader(csvPath)) {
-	            String header = reader.readLine();
-	            if (header == null || header.isBlank()) {
-	                errors.add("Legacy CSV: header row is empty.");
-	                return;
-	            }
-	            char delimiter = sniffDelimiter(header);
-	            String[] cols = header.split(java.util.regex.Pattern.quote(String.valueOf(delimiter)));
-	            boolean found = Arrays.stream(cols)
-	                    .map(String::trim)
-	                    .anyMatch(c -> c.equalsIgnoreCase(columnName.trim()));
-	            if (found) {
-	                info.add("✅ Legacy CSV contains column: " + columnName);
-	            } else {
-	                errors.add("Legacy CSV: missing column '" + columnName + "'. Found: " + Arrays.toString(cols));
-	            }
-	        } catch (IOException e) {
-	            warnings.add("Legacy CSV: cannot read header row: " + e.getMessage());
-	        }
-	    }
+        List<Path> subfolders = listSubbasinFolders(root);
+        if (subfolders.isEmpty()) {
+            warnings.add("Legacy: no subbasin folders found inside root.");
+        } else {
+            info.add("✅ Legacy subbasin folders found: " + subfolders.size());
+            List<String> prefixes = cfg.legacyTimeseriesPrefixes() == null || cfg.legacyTimeseriesPrefixes().isEmpty()
+                    ? List.of(ExplorerConfig.legacyTimeseriesPrefixes())
+                    : cfg.legacyTimeseriesPrefixes();
+            validateLegacyTimeseriesFiles(subfolders, prefixes, info, warnings);
+        }
+    }
 
-	    private static char sniffDelimiter(String header) {
-	        long commas = header.chars().filter(ch -> ch == ',').count();
-	        long semicolons = header.chars().filter(ch -> ch == ';').count();
-	        return semicolons > commas ? ';' : ',';
-	    }
+    private static void validateCsvHasColumn(Path csvPath, String columnName, List<String> info,
+                                             List<String> errors, List<String> warnings) {
+        info.add("— Checking legacy CSV columns…");
+        try {
+            List<String> cols = readCsvHeaderColumns(csvPath);
+            if (cols.isEmpty()) {
+                errors.add("Legacy CSV: header row is empty.");
+                return;
+            }
+            boolean found = cols.stream()
+                    .map(String::trim)
+                    .anyMatch(c -> c.equalsIgnoreCase(columnName.trim()));
+            if (found) {
+                info.add("✅ Legacy CSV contains column: " + columnName);
+            } else {
+                errors.add("Legacy CSV: missing column '" + columnName + "'. Found: " + cols);
+            }
+        } catch (IOException e) {
+            warnings.add("Legacy CSV: cannot read header row: " + e.getMessage());
+        }
+    }
 
-	    private static boolean hasSubbasinFolders(Path root) {
-	        try {
-	            return Files.list(root).anyMatch(Files::isDirectory);
-	        } catch (IOException e) {
-	            return false;
-	        }
-	    }
+    private static char sniffDelimiter(String header) {
+        long commas = header.chars().filter(ch -> ch == ',').count();
+        long semicolons = header.chars().filter(ch -> ch == ';').count();
+        return semicolons > commas ? ';' : ',';
+    }
 
-	
-	
-	
+    private static List<Path> listSubbasinFolders(Path root) {
+        try (var stream = Files.list(root)) {
+            return stream.filter(Files::isDirectory).toList();
+        } catch (IOException e) {
+            return List.of();
+        }
+    }
+
+    private static void validateLegacyTimeseriesFiles(List<Path> subfolders, List<String> prefixes, List<String> info,
+            List<String> warnings) {
+        int checked = 0;
+        int matched = 0;
+        int parseable = 0;
+        for (Path folder : subfolders) {
+            String id = folder.getFileName().toString();
+            if (id.isBlank()) {
+                continue;
+            }
+            checked++;
+            boolean hasMatch = false;
+            for (String prefix : prefixes) {
+                if (prefix == null || prefix.isBlank()) {
+                    continue;
+                }
+                if (Files.exists(folder.resolve(prefix.trim() + id + ".csv"))) {
+                    hasMatch = true;
+                    break;
+                }
+            }
+            if (hasMatch) {
+                matched++;
+                if (hasParseableLegacyTimeseries(folder, id, prefixes)) {
+                    parseable++;
+                }
+            }
+        }
+        if (checked == 0) {
+            return;
+        }
+        if (matched == 0) {
+            warnings.add("Legacy: no timeseries file matched '<prefix><subbasinId>.csv' in subbasin folders.");
+        } else {
+            info.add("✅ Legacy timeseries naming check passed for " + matched + "/" + checked + " folders.");
+            if (parseable == 0) {
+                warnings.add("Legacy: matched timeseries files found, but none has parseable header columns (expected @H,timestamp,value_1 or standard CSV header).");
+            } else {
+                info.add("✅ Legacy timeseries CSV header check passed for " + parseable + " folder(s).");
+            }
+        }
+    }
+
+    private static boolean hasParseableLegacyTimeseries(Path folder, String id, List<String> prefixes) {
+        for (String prefix : prefixes) {
+            if (prefix == null || prefix.isBlank()) {
+                continue;
+            }
+            Path candidate = folder.resolve(prefix.trim() + id + ".csv");
+            if (!Files.exists(candidate)) {
+                continue;
+            }
+            try {
+                List<String> cols = readCsvHeaderColumns(candidate);
+                if (!cols.isEmpty()) {
+                    return true;
+                }
+            } catch (IOException ignored) {
+                // continue with next candidate
+            }
+        }
+        return false;
+    }
+
+    private static List<String> readCsvHeaderColumns(Path csvPath) throws IOException {
+        try (BufferedReader reader = Files.newBufferedReader(csvPath)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                if (trimmed.startsWith("@H")) {
+                    char delimiter = sniffDelimiter(trimmed);
+                    String[] cols = trimmed.split(java.util.regex.Pattern.quote(String.valueOf(delimiter)));
+                    List<String> out = new ArrayList<>();
+                    for (int i = 1; i < cols.length; i++) {
+                        String col = cols[i].trim();
+                        if (!col.isEmpty()) {
+                            out.add(col);
+                        }
+                    }
+                    return out;
+                }
+                if (!trimmed.startsWith("@") && !trimmed.regionMatches(true, 0, "Created", 0, 7)
+                        && !trimmed.regionMatches(true, 0, "Author", 0, 6)
+                        && !trimmed.regionMatches(true, 0, "ID", 0, 2)
+                        && !trimmed.regionMatches(true, 0, "Type", 0, 4)
+                        && !trimmed.regionMatches(true, 0, "Format", 0, 6)) {
+                    char delimiter = sniffDelimiter(trimmed);
+                    return Arrays.stream(trimmed.split(java.util.regex.Pattern.quote(String.valueOf(delimiter))))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .toList();
+                }
+            }
+        }
+        return List.of();
+    }
+
+    private static Path toDbfPath(Path shapefile) {
+        String filename = shapefile.getFileName().toString();
+        int dot = filename.lastIndexOf('.');
+        String base = dot > 0 ? filename.substring(0, dot) : filename;
+        return shapefile.getParent().resolve(base + ".dbf");
+    }
+
+    private static String defaultIfBlank(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
 }
