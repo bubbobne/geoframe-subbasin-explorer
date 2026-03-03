@@ -77,6 +77,32 @@ public final class ExplorerConfig {
 		return configured.split(",");
 	}
 
+	public static String legacySubbasinsShapefile() {
+		return get("legacy.files.subbasins.shp", "subbasins_complete.shp");
+	}
+
+	public static String legacyNetworkShapefile() {
+		return get("legacy.files.network.shp", "network_complete.shp");
+	}
+
+	public static String legacySubbasinsCsv() {
+		return get("legacy.files.subbasins.csv", "subbasins.csv");
+	}
+
+	public static String legacyTopologyCsv() {
+		return get("legacy.files.topology.csv", "topology.csv");
+	}
+
+	public static String[] legacyTimeseriesPrefixes() {
+		String configured = get("legacy.timeseries.prefixes",
+				"C_AET_,C_S_,C_Throughfall_,freezing_,GW_S_,Md_,melting_,Q_,Q_fast_,Q_slow_,Q_mm_,Q_fast_mm_,Q_slow_mm_,RZ_AET_,RZ_S_,SWE_");
+		String[] values = configured.split(",");
+		for (int i = 0; i < values.length; i++) {
+			values[i] = values[i].trim();
+		}
+		return values;
+	}
+
 
 	public static String chartOption(String key, String defaultValue) {
 		return get(key, defaultValue);

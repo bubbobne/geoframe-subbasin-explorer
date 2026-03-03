@@ -1,6 +1,8 @@
 package it.geoframe.blogpost.subbasins.explorer.services;
 
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.prefs.Preferences;
 
@@ -18,10 +20,20 @@ public final class ProjectConfigStore {
 			P.remove("legacyRootPath");
 			P.remove("legacyShpIdField");
 			P.remove("legacyCsvIdColumn");
+			P.remove("legacySubbasinsShpName");
+			P.remove("legacyNetworkShpName");
+			P.remove("legacySubbasinsCsvName");
+			P.remove("legacyTopologyCsvName");
+			P.remove("legacyTimeseriesPrefixes");
 		} else {
 			P.put("legacyRootPath", cfg.legacyRootPath().toString());
 			P.put("legacyShpIdField", cfg.legacyShpIdField());
 			P.put("legacyCsvIdColumn", cfg.legacyCsvIdColumn());
+			P.put("legacySubbasinsShpName", orDefault(cfg.legacySubbasinsShpName(), ExplorerConfig.legacySubbasinsShapefile()));
+			P.put("legacyNetworkShpName", orDefault(cfg.legacyNetworkShpName(), ExplorerConfig.legacyNetworkShapefile()));
+			P.put("legacySubbasinsCsvName", orDefault(cfg.legacySubbasinsCsvName(), ExplorerConfig.legacySubbasinsCsv()));
+			P.put("legacyTopologyCsvName", orDefault(cfg.legacyTopologyCsvName(), ExplorerConfig.legacyTopologyCsv()));
+			P.put("legacyTimeseriesPrefixes", String.join(",", cfg.legacyTimeseriesPrefixes()));
 			P.remove("geopackagePath");
 			P.remove("sqlitePath");
 		}
@@ -53,7 +65,13 @@ public final class ProjectConfigStore {
 		String csvId = P.get("legacyCsvIdColumn", null);
 		if (root == null || shpId == null || csvId == null)
 			return Optional.empty();
-		return Optional.of(ProjectConfig.legacyFolder(Path.of(root), shpId, csvId));
+		String prefixes = P.get("legacyTimeseriesPrefixes", String.join(",", ExplorerConfig.legacyTimeseriesPrefixes()));
+		List<String> prefixList = Arrays.stream(prefixes.split(",")).map(String::trim).filter(s -> !s.isBlank()).toList();
+		return Optional.of(ProjectConfig.legacyFolder(Path.of(root), shpId, csvId,
+				P.get("legacySubbasinsShpName", ExplorerConfig.legacySubbasinsShapefile()),
+				P.get("legacyNetworkShpName", ExplorerConfig.legacyNetworkShapefile()),
+				P.get("legacySubbasinsCsvName", ExplorerConfig.legacySubbasinsCsv()),
+				P.get("legacyTopologyCsvName", ExplorerConfig.legacyTopologyCsv()), prefixList));
 
 	}
 
@@ -63,7 +81,16 @@ public final class ProjectConfigStore {
 		P.remove("legacyRootPath");
 		P.remove("legacyShpIdField");
 		P.remove("legacyCsvIdColumn");
+		P.remove("legacySubbasinsShpName");
+		P.remove("legacyNetworkShpName");
+		P.remove("legacySubbasinsCsvName");
+		P.remove("legacyTopologyCsvName");
+		P.remove("legacyTimeseriesPrefixes");
 		P.remove("mode");
 
+	}
+
+	private static String orDefault(String value, String fallback) {
+		return value == null || value.isBlank() ? fallback : value;
 	}
 }

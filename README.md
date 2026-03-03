@@ -134,6 +134,24 @@ Currently supported / expected formats:
 Future extensions may include:
 - **CSV time series** (recommended for initial versions)
 
+### Legacy folder mode (in progress)
+
+In addition to GeoPackage+SQLite mode, the app now validates a legacy folder structure with configurable file names:
+- root-level files:
+  - `topology.csv` *(optional but checked when configured)*
+  - `subbasins.csv`
+  - `subbasins_complete.shp`
+  - `network_complete.shp`
+- one folder per subbasin named with subbasin ID
+- time-series files inside each subbasin folder following `<prefix><subbasinId>.csv`
+
+Configurable keys in `explorer.properties`:
+- `legacy.files.subbasins.shp`
+- `legacy.files.network.shp`
+- `legacy.files.subbasins.csv`
+- `legacy.files.topology.csv`
+- `legacy.timeseries.prefixes`
+
 ---
 
 ## Usage workflow

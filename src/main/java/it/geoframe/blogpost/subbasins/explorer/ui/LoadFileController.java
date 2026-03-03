@@ -2,11 +2,14 @@ package it.geoframe.blogpost.subbasins.explorer.ui;
 
 import javax.swing.*;
 
+import it.geoframe.blogpost.subbasins.explorer.services.ExplorerConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfig;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectConfigStore;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectValidator;
 import it.geoframe.blogpost.subbasins.explorer.services.ProjectMode;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 public final class LoadFileController {
@@ -28,6 +31,7 @@ public final class LoadFileController {
 		this.navigator = navigator;
 		wire();
 		preloadIfPresent();
+		applyLegacyDefaultsIfEmpty();
 		revalidateAndUpdateUI();
 	}
 
@@ -76,12 +80,21 @@ public final class LoadFileController {
 				.addDocumentListener(new SimpleDocumentListener(this::revalidateAndUpdateUI));
 		view.legacyCsvIdFieldInput().getDocument()
 				.addDocumentListener(new SimpleDocumentListener(this::revalidateAndUpdateUI));
+		view.legacySubbasinsShpInput().getDocument()
+				.addDocumentListener(new SimpleDocumentListener(this::revalidateAndUpdateUI));
+		view.legacyNetworkShpInput().getDocument()
+				.addDocumentListener(new SimpleDocumentListener(this::revalidateAndUpdateUI));
+		view.legacySubbasinsCsvInput().getDocument()
+				.addDocumentListener(new SimpleDocumentListener(this::revalidateAndUpdateUI));
+		view.legacyTopologyCsvInput().getDocument()
+				.addDocumentListener(new SimpleDocumentListener(this::revalidateAndUpdateUI));
+		view.legacyTimeseriesPrefixesInput().getDocument()
+				.addDocumentListener(new SimpleDocumentListener(this::revalidateAndUpdateUI));
 
 		view.continueButton().addActionListener(e -> {
 			ProjectConfig cfg = currentConfig();
 			var result = ProjectValidator.validate(cfg);
 			if (!result.ok()) {
-				// dovrebbe essere già disabilitato, ma doppio check
 				showResult(result);
 				return;
 			}
@@ -104,6 +117,11 @@ public final class LoadFileController {
 				view.setLegacyRootPath(legacyRootPath.toString());
 				view.setLegacyShpIdField(cfg.legacyShpIdField());
 				view.setLegacyCsvIdField(cfg.legacyCsvIdColumn());
+				view.setLegacySubbasinsShp(cfg.legacySubbasinsShpName());
+				view.setLegacyNetworkShp(cfg.legacyNetworkShpName());
+				view.setLegacySubbasinsCsv(cfg.legacySubbasinsCsvName());
+				view.setLegacyTopologyCsv(cfg.legacyTopologyCsvName());
+				view.setLegacyTimeseriesPrefixes(String.join(",", cfg.legacyTimeseriesPrefixes()));
 				view.legacyModeButton().setSelected(true);
 			}
 			view.setGeopackageEnabled(cfg.mode() == ProjectMode.GEOPACKAGE);
@@ -111,6 +129,24 @@ public final class LoadFileController {
 
 			view.appendLogLine("Loaded last project from preferences.");
 		});
+	}
+
+	private void applyLegacyDefaultsIfEmpty() {
+		if (isBlank(view.legacySubbasinsShp())) {
+			view.setLegacySubbasinsShp(ExplorerConfig.legacySubbasinsShapefile());
+		}
+		if (isBlank(view.legacyNetworkShp())) {
+			view.setLegacyNetworkShp(ExplorerConfig.legacyNetworkShapefile());
+		}
+		if (isBlank(view.legacySubbasinsCsv())) {
+			view.setLegacySubbasinsCsv(ExplorerConfig.legacySubbasinsCsv());
+		}
+		if (isBlank(view.legacyTopologyCsv())) {
+			view.setLegacyTopologyCsv(ExplorerConfig.legacyTopologyCsv());
+		}
+		if (isBlank(view.legacyTimeseriesPrefixes())) {
+			view.setLegacyTimeseriesPrefixes(String.join(",", ExplorerConfig.legacyTimeseriesPrefixes()));
+		}
 	}
 
 	private void revalidateAndUpdateUI() {
@@ -178,48 +214,60 @@ public final class LoadFileController {
 		}
 		return null;
 	}
-	
-	 private Path chooseDirectory(String title) {
-	        JFileChooser fc = new JFileChooser();
-	        fc.setDialogTitle(title);
-	        fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-	        int res = fc.showOpenDialog(view);
-	        if (res == JFileChooser.APPROVE_OPTION) {
-	            return fc.getSelectedFile().toPath();
-	        }
-	        return null;
-	    }
 
-	    private ProjectConfig currentConfig() {
-	        if (mode == ProjectMode.GEOPACKAGE) {
-	            return ProjectConfig.geopackage(geopackagePath, sqlitePath);
-	        }
-	        return ProjectConfig.legacyFolder(legacyRootPath,
-	                Objects.toString(view.legacyShpIdField(), ""),
-	                Objects.toString(view.legacyCsvIdField(), ""));
-	    }
+	private Path chooseDirectory(String title) {
+		JFileChooser fc = new JFileChooser();
+		fc.setDialogTitle(title);
+		fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+		int res = fc.showOpenDialog(view);
+		if (res == JFileChooser.APPROVE_OPTION) {
+			return fc.getSelectedFile().toPath();
+		}
+		return null;
+	}
 
-	    private static final class SimpleDocumentListener implements javax.swing.event.DocumentListener {
-	        private final Runnable onChange;
+	private ProjectConfig currentConfig() {
+		if (mode == ProjectMode.GEOPACKAGE) {
+			return ProjectConfig.geopackage(geopackagePath, sqlitePath);
+		}
+		return ProjectConfig.legacyFolder(legacyRootPath, Objects.toString(view.legacyShpIdField(), ""),
+				Objects.toString(view.legacyCsvIdField(), ""), Objects.toString(view.legacySubbasinsShp(), ""),
+				Objects.toString(view.legacyNetworkShp(), ""), Objects.toString(view.legacySubbasinsCsv(), ""),
+				Objects.toString(view.legacyTopologyCsv(), ""), parseCsvList(view.legacyTimeseriesPrefixes()));
+	}
 
-	        private SimpleDocumentListener(Runnable onChange) {
-	            this.onChange = onChange;
-	        }
+	private List<String> parseCsvList(String csv) {
+		if (csv == null || csv.isBlank()) {
+			return List.of();
+		}
+		return Arrays.stream(csv.split(",")).map(String::trim).filter(s -> !s.isBlank()).toList();
+	}
 
-	        @Override
-	        public void insertUpdate(javax.swing.event.DocumentEvent e) {
-	            onChange.run();
-	        }
+	private boolean isBlank(String value) {
+		return value == null || value.isBlank();
+	}
 
-	        @Override
-	        public void removeUpdate(javax.swing.event.DocumentEvent e) {
-	            onChange.run();
-	        }
+	private static final class SimpleDocumentListener implements javax.swing.event.DocumentListener {
+		private final Runnable onChange;
 
-	        @Override
-	        public void changedUpdate(javax.swing.event.DocumentEvent e) {
-	            onChange.run();
-	        }
-	    }
+		private SimpleDocumentListener(Runnable onChange) {
+			this.onChange = onChange;
+		}
+
+		@Override
+		public void insertUpdate(javax.swing.event.DocumentEvent e) {
+			onChange.run();
+		}
+
+		@Override
+		public void removeUpdate(javax.swing.event.DocumentEvent e) {
+			onChange.run();
+		}
+
+		@Override
+		public void changedUpdate(javax.swing.event.DocumentEvent e) {
+			onChange.run();
+		}
+	}
 
 }
