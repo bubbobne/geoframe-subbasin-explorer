@@ -67,6 +67,8 @@ public class LoadFileView extends JPanel {
 	private final JButton m_browseLegacyRootButton = new JButton("Browse…");
 
 	private final JButton m_continueButton = new JButton("Continue");
+	private final JPanel m_geopackageSection = new JPanel();
+	private final JPanel m_legacySection = new JPanel();
 
 	public LoadFileView() {
 		buildUi();
@@ -273,6 +275,9 @@ public class LoadFileView extends JPanel {
 		m_sqlitePathField.setEnabled(enabled);
 		m_browseGeopButton.setEnabled(enabled);
 		m_browseSqliteButton.setEnabled(enabled);
+		m_geopackageSection.setVisible(enabled);
+		revalidate();
+		repaint();
 	}
 
 	public void setLegacyEnabled(boolean enabled) {
@@ -285,6 +290,9 @@ public class LoadFileView extends JPanel {
 		m_legacyTopologyCsvField.setEnabled(enabled);
 		m_legacyPrefixesField.setEnabled(enabled);
 		m_browseLegacyRootButton.setEnabled(enabled);
+		m_legacySection.setVisible(enabled);
+		revalidate();
+		repaint();
 	}
 
 	private void buildUi() {
@@ -309,26 +317,32 @@ public class LoadFileView extends JPanel {
 		content.add(modeRow);
 		content.add(Box.createVerticalStrut(16));
 
-		content.add(sectionRow(m_geopLabel, m_geopPathField, m_browseGeopButton));
-		content.add(Box.createVerticalStrut(12));
-		content.add(sectionRow(m_inputLabel, m_sqlitePathField, m_browseSqliteButton));
+		m_geopackageSection.setOpaque(false);
+		m_geopackageSection.setLayout(new BoxLayout(m_geopackageSection, BoxLayout.Y_AXIS));
+		m_geopackageSection.add(sectionRow(m_geopLabel, m_geopPathField, m_browseGeopButton));
+		m_geopackageSection.add(Box.createVerticalStrut(12));
+		m_geopackageSection.add(sectionRow(m_inputLabel, m_sqlitePathField, m_browseSqliteButton));
+		content.add(m_geopackageSection);
 		content.add(Box.createVerticalStrut(16));
 
-		content.add(sectionRow(m_legacyRootLabel, m_legacyRootField, m_browseLegacyRootButton));
-		content.add(Box.createVerticalStrut(10));
-		content.add(sectionRow(m_legacyShpIdLabel, m_legacyShpIdField, null));
-		content.add(Box.createVerticalStrut(10));
-		content.add(sectionRow(m_legacyCsvIdLabel, m_legacyCsvIdField, null));
-		content.add(Box.createVerticalStrut(10));
-		content.add(sectionRow(m_legacySubbasinShpLabel, m_legacySubbasinShpField, null));
-		content.add(Box.createVerticalStrut(10));
-		content.add(sectionRow(m_legacyNetworkShpLabel, m_legacyNetworkShpField, null));
-		content.add(Box.createVerticalStrut(10));
-		content.add(sectionRow(m_legacySubbasinsCsvLabel, m_legacySubbasinsCsvField, null));
-		content.add(Box.createVerticalStrut(10));
-		content.add(sectionRow(m_legacyTopologyCsvLabel, m_legacyTopologyCsvField, null));
-		content.add(Box.createVerticalStrut(10));
-		content.add(sectionRow(m_legacyPrefixesLabel, m_legacyPrefixesField, null));
+		m_legacySection.setOpaque(false);
+		m_legacySection.setLayout(new BoxLayout(m_legacySection, BoxLayout.Y_AXIS));
+		m_legacySection.add(sectionRow(m_legacyRootLabel, m_legacyRootField, m_browseLegacyRootButton));
+		m_legacySection.add(Box.createVerticalStrut(10));
+		m_legacySection.add(sectionRow(m_legacyShpIdLabel, m_legacyShpIdField, null));
+		m_legacySection.add(Box.createVerticalStrut(10));
+		m_legacySection.add(sectionRow(m_legacyCsvIdLabel, m_legacyCsvIdField, null));
+		m_legacySection.add(Box.createVerticalStrut(10));
+		m_legacySection.add(sectionRow(m_legacySubbasinShpLabel, m_legacySubbasinShpField, null));
+		m_legacySection.add(Box.createVerticalStrut(10));
+		m_legacySection.add(sectionRow(m_legacyNetworkShpLabel, m_legacyNetworkShpField, null));
+		m_legacySection.add(Box.createVerticalStrut(10));
+		m_legacySection.add(sectionRow(m_legacySubbasinsCsvLabel, m_legacySubbasinsCsvField, null));
+		m_legacySection.add(Box.createVerticalStrut(10));
+		m_legacySection.add(sectionRow(m_legacyTopologyCsvLabel, m_legacyTopologyCsvField, null));
+		m_legacySection.add(Box.createVerticalStrut(10));
+		m_legacySection.add(sectionRow(m_legacyPrefixesLabel, m_legacyPrefixesField, null));
+		content.add(m_legacySection);
 		content.add(Box.createVerticalStrut(14));
 
 		JLabel logLabel = new JLabel("Checks / log");
