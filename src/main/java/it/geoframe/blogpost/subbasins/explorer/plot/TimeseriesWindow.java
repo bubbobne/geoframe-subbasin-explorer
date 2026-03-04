@@ -16,6 +16,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -31,6 +33,7 @@ import java.util.function.Supplier;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -42,6 +45,7 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.WindowConstants;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
@@ -93,6 +97,7 @@ public final class TimeseriesWindow {
 	private String legacyStreamGaugePrefix;
 	private JLabel addSourceLabel;
 	private JButton addSimulationButton;
+	private JButton metricsButton;
 
 	public TimeseriesWindow(Component parent, ProjectConfig config, TimeseriesLoader loader,
 			Supplier<List<String>> tableSupplier, Supplier<List<String>> basinSupplier,
@@ -282,7 +287,7 @@ public final class TimeseriesWindow {
 		addGaugeButton.addActionListener(e -> addSelectedSeriesFromGaugeCombo());
 		panel.add(addGaugeButton, gbc);
 		gbc.gridy++;
-		JButton metricsButton = new JButton("Calcola metriche (KGE, NSE, NSElog)");
+		metricsButton = new JButton("Calcola metriche (KGE, NSE, NSElog)");
 		metricsButton.addActionListener(e -> showMetricsPopup());
 		panel.add(metricsButton, gbc);
 		return panel;
@@ -334,23 +339,27 @@ public final class TimeseriesWindow {
 			for (String table : filterStreamGaugeTables(tableSupplier.get())) {
 				streamGaugeCombo.addItem(table);
 			}
+			if (metricsButton != null) {
+				metricsButton.setVisible(true);
+			}
 			return;
 		}
 
-		addSourceLabel.setText("Bacino da aggiungere:");
-		addSimulationButton.setText("Carica bacino");
+		addSourceLabel.setText("File CSV simulazione:");
+		addSimulationButton.setText("Carica file simulazione");
 		simulationTableCombo.removeAllItems();
-		simulationTableCombo.addItem("legacy-folder");
+		simulationTableCombo.addItem("selezione file");
 		simulationTableCombo.setEnabled(false);
 		basinCombo.removeAllItems();
 		for (String id : basinSupplier.get()) {
 			basinCombo.addItem(id);
 		}
 		streamGaugeCombo.removeAllItems();
-		for (String id : basinSupplier.get()) {
-			streamGaugeCombo.addItem(id);
+		streamGaugeCombo.addItem("selezione file");
+		streamGaugeCombo.setEnabled(false);
+		if (metricsButton != null) {
+			metricsButton.setVisible(false);
 		}
-		streamGaugeCombo.setEnabled(true);
 	}
 
 
@@ -431,28 +440,44 @@ public final class TimeseriesWindow {
 	}
 
 	private void addLegacyBasinSeries(boolean gaugeSeries) {
-		String basinId = gaugeSeries ? (String) streamGaugeCombo.getSelectedItem() : (String) basinCombo.getSelectedItem();
-		if (basinId == null || basinId.isBlank()) {
-			appendLog("Seleziona un bacino.");
-			return;
-		}
 		if (!"discharge".equalsIgnoreCase(activeType)) {
 			appendLog("Legacy mode: al momento è supportato solo il grafico discharge da file.");
 			return;
 		}
-		String prefix = gaugeSeries ? legacyStreamGaugePrefix : legacyDischargePrefix;
-		TimeSeries series = new TimeSeries((gaugeSeries ? "gauge " : "sim ") + prefix + basinId + ".csv");
-		int count = loader.fillSeriesFromLegacyFolder(config, basinId, prefix, series);
+		Path selectedCsv = chooseLegacyCsvFile(gaugeSeries ? "Seleziona file CSV osservato" : "Seleziona file CSV simulato");
+		if (selectedCsv == null) {
+			appendLog("Selezione file annullata.");
+			return;
+		}
+		TimeSeries series = new TimeSeries((gaugeSeries ? "gauge " : "sim ") + selectedCsv.getFileName());
+		int count = loader.fillSeriesFromLegacyCsv(selectedCsv, series);
 		if (count <= 0) {
-			appendLog("Nessun dato trovato nel file legacy " + prefix + basinId + ".csv per bacino " + basinId + ".");
+			appendLog("Nessun dato trovato nel file legacy " + selectedCsv.getFileName() + ".");
 			return;
 		}
 		dataset.addSeries(series);
 		applySeriesStyles();
 		reloadSeriesList();
-		appendLog("Aggiunta serie legacy: " + prefix + basinId + ".csv | punti: " + count);
+		appendLog("Aggiunta serie legacy: " + selectedCsv.getFileName() + " | punti: " + count);
 	}
 
+
+
+	private Path chooseLegacyCsvFile(String title) {
+		JFileChooser chooser = new JFileChooser();
+		chooser.setDialogTitle(title);
+		chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+		chooser.setAcceptAllFileFilterUsed(true);
+		chooser.setFileFilter(new FileNameExtensionFilter("CSV files", "csv"));
+		if (config != null && config.legacyRootPath() != null && Files.exists(config.legacyRootPath())) {
+			chooser.setCurrentDirectory(config.legacyRootPath().toFile());
+		}
+		int result = chooser.showOpenDialog(dialog);
+		if (result == JFileChooser.APPROVE_OPTION && chooser.getSelectedFile() != null) {
+			return chooser.getSelectedFile().toPath();
+		}
+		return null;
+	}
 
 	private void addFluxesSeries(String table) {
 		if (config.mode() == ProjectMode.LEGACY_FOLDER) {
@@ -748,6 +773,11 @@ public final class TimeseriesWindow {
 	}
 
 	private void showMetricsPopup() {
+		if (config.mode() == ProjectMode.LEGACY_FOLDER) {
+			appendLog("Metriche da popup non disponibili in legacy mode.");
+			return;
+		}
+
 		List<TimeSeries> simulationSeries = getSimulationSeries();
 		List<TimeSeries> gaugeSeries = getGaugeSeries();
 		if (simulationSeries.isEmpty()) {

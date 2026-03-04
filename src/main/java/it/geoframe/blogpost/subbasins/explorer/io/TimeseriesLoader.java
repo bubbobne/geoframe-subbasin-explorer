@@ -70,7 +70,15 @@ public final class TimeseriesLoader {
 		if (!Files.exists(csv) || !Files.isReadable(csv)) {
 			return 0;
 		}
-		return fillSeriesFromLegacyCsv(csv, series);
+		return fillSeriesFromLegacyCsvInternal(csv, series);
+	}
+
+
+	public int fillSeriesFromLegacyCsv(Path csvPath, TimeSeries series) {
+		if (csvPath == null || series == null || !Files.exists(csvPath) || !Files.isReadable(csvPath)) {
+			return 0;
+		}
+		return fillSeriesFromLegacyCsvInternal(csvPath, series);
 	}
 
 	public Set<String> listColumnNamesFromAnyInput(ProjectConfig config, String table) {
@@ -150,7 +158,7 @@ public final class TimeseriesLoader {
 		}
 	}
 
-	private int fillSeriesFromLegacyCsv(Path csvPath, TimeSeries series) {
+	private int fillSeriesFromLegacyCsvInternal(Path csvPath, TimeSeries series) {
 		try (BufferedReader reader = Files.newBufferedReader(csvPath)) {
 			LegacyCsvHeader header = LegacyCsvHeader.read(reader);
 			if (header == null) {
