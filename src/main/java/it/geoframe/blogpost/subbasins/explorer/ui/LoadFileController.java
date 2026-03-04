@@ -51,7 +51,7 @@ public final class LoadFileController {
 		});
 
 		view.browseGeopackageButton().addActionListener(e -> {
-			Path p = chooseFile("Select GeoPackage", "gpkg");
+			Path p = chooseFile(I18n.tr("chooser.selectGeopackage"), "gpkg");
 			if (p != null) {
 				geopackagePath = p;
 				view.setGeopackagePath(p.toString());
@@ -60,7 +60,7 @@ public final class LoadFileController {
 		});
 
 		view.browseSqliteButton().addActionListener(e -> {
-			Path p = chooseFile("Select SQLite", "sqlite", "db");
+			Path p = chooseFile(I18n.tr("chooser.selectSqlite"), "sqlite", "db");
 			if (p != null) {
 				sqlitePath = p;
 				view.setSqlitePath(p.toString());
@@ -68,7 +68,7 @@ public final class LoadFileController {
 			}
 		});
 		view.browseLegacyRootButton().addActionListener(e -> {
-			Path p = chooseDirectory("Select legacy folder");
+			Path p = chooseDirectory(I18n.tr("chooser.selectLegacy"));
 			if (p != null) {
 				legacyRootPath = p;
 				view.setLegacyRootPath(p.toString());
@@ -127,7 +127,7 @@ public final class LoadFileController {
 			view.setGeopackageEnabled(cfg.mode() == ProjectMode.GEOPACKAGE);
 			view.setLegacyEnabled(cfg.mode() == ProjectMode.LEGACY_FOLDER);
 
-			view.appendLogLine("Loaded last project from preferences.");
+			view.appendLogLine(I18n.tr("load.log.loadedLastProject"));
 		});
 	}
 
@@ -153,13 +153,13 @@ public final class LoadFileController {
 		if (mode == ProjectMode.GEOPACKAGE) {
 			if (geopackagePath == null || sqlitePath == null) {
 				view.setContinueEnabled(false);
-				view.setLogText("Select a GeoPackage and a SQLite file.");
+				view.setLogText(I18n.tr("load.log.selectGeopackage"));
 				return;
 			}
 		} else {
 			if (legacyRootPath == null) {
 				view.setContinueEnabled(false);
-				view.setLogText("Select the legacy folder and fill the ID fields.");
+				view.setLogText(I18n.tr("load.log.selectLegacy"));
 				return;
 
 			}
@@ -174,23 +174,23 @@ public final class LoadFileController {
 	private void showResult(ProjectValidator.ValidationResult result) {
 		StringBuilder sb = new StringBuilder();
 		if (result.ok())
-			sb.append("✅ Validation OK\n\n");
+			sb.append(I18n.tr("load.log.validationOk")).append("\n\n");
 
 		if (!result.info().isEmpty()) {
-			sb.append("Info:\n");
+			sb.append(I18n.tr("load.log.info")).append("\n");
 			for (String w : result.info())
 				sb.append(" - ").append(w).append("\n");
 			sb.append("\n");
 		}
 
 		if (!result.warnings().isEmpty()) {
-			sb.append("Warnings:\n");
+			sb.append(I18n.tr("load.log.warnings")).append("\n");
 			for (String w : result.warnings())
 				sb.append(" - ").append(w).append("\n");
 			sb.append("\n");
 		}
 		if (!result.errors().isEmpty()) {
-			sb.append("Errors:\n");
+			sb.append(I18n.tr("load.log.errors")).append("\n");
 			for (String er : result.errors())
 				sb.append(" - ").append(er).append("\n");
 		}
@@ -205,7 +205,7 @@ public final class LoadFileController {
 		if (extensions != null && extensions.length > 0) {
 			fc.setAcceptAllFileFilterUsed(true);
 			fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
-					String.join(", ", extensions).toUpperCase() + " files", extensions));
+					String.join(", ", extensions).toUpperCase() + " " + I18n.tr("chooser.filesSuffix"), extensions));
 		}
 
 		int res = fc.showOpenDialog(view);

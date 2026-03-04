@@ -24,49 +24,49 @@ import javax.swing.border.EmptyBorder;
  */
 public class LoadFileView extends JPanel {
 
-	private final JLabel m_titleLabel = new JLabel("Open project");
+	private final JLabel m_titleLabel = new JLabel(I18n.tr("load.title"));
 
-	private final JLabel m_modeLabel = new JLabel("Project type");
-	private final JRadioButton m_geopackageMode = new JRadioButton("GeoPackage + SQLite");
-	private final JRadioButton m_legacyMode = new JRadioButton("Legacy folder");
+	private final JLabel m_modeLabel = new JLabel(I18n.tr("load.projectType"));
+	private final JRadioButton m_geopackageMode = new JRadioButton(I18n.tr("load.mode.geopackage"));
+	private final JRadioButton m_legacyMode = new JRadioButton(I18n.tr("load.mode.legacy"));
 
-	private final JLabel m_geopLabel = new JLabel("GeoPackage (must include: subbasin, topologi, simulation*)");
+	private final JLabel m_geopLabel = new JLabel(I18n.tr("load.geopackage.label"));
 	private final JTextField m_geopPathField = new JTextField();
 
-	private final JLabel m_inputLabel = new JLabel("SQLite input (must include table: measurements)");
+	private final JLabel m_inputLabel = new JLabel(I18n.tr("load.sqlite.label"));
 	private final JTextField m_sqlitePathField = new JTextField();
 
-	private final JLabel m_legacyRootLabel = new JLabel("Legacy root folder");
+	private final JLabel m_legacyRootLabel = new JLabel(I18n.tr("load.legacy.root"));
 	private final JTextField m_legacyRootField = new JTextField();
 
-	private final JLabel m_legacyShpIdLabel = new JLabel("Subbasin ID field name in shapefile");
+	private final JLabel m_legacyShpIdLabel = new JLabel(I18n.tr("load.legacy.shpId"));
 	private final JTextField m_legacyShpIdField = new JTextField();
 
-	private final JLabel m_legacyCsvIdLabel = new JLabel("Subbasin ID column name in CSV");
+	private final JLabel m_legacyCsvIdLabel = new JLabel(I18n.tr("load.legacy.csvId"));
 	private final JTextField m_legacyCsvIdField = new JTextField();
 
-	private final JLabel m_legacySubbasinShpLabel = new JLabel("Subbasins shapefile name");
+	private final JLabel m_legacySubbasinShpLabel = new JLabel(I18n.tr("load.legacy.subbasinShp"));
 	private final JTextField m_legacySubbasinShpField = new JTextField();
 
-	private final JLabel m_legacyNetworkShpLabel = new JLabel("Network shapefile name");
+	private final JLabel m_legacyNetworkShpLabel = new JLabel(I18n.tr("load.legacy.networkShp"));
 	private final JTextField m_legacyNetworkShpField = new JTextField();
 
-	private final JLabel m_legacySubbasinsCsvLabel = new JLabel("Subbasins CSV name");
+	private final JLabel m_legacySubbasinsCsvLabel = new JLabel(I18n.tr("load.legacy.subbasinCsv"));
 	private final JTextField m_legacySubbasinsCsvField = new JTextField();
 
-	private final JLabel m_legacyTopologyCsvLabel = new JLabel("Topology CSV name (optional)");
+	private final JLabel m_legacyTopologyCsvLabel = new JLabel(I18n.tr("load.legacy.topologyCsv"));
 	private final JTextField m_legacyTopologyCsvField = new JTextField();
 
-	private final JLabel m_legacyPrefixesLabel = new JLabel("Timeseries prefixes (comma-separated)");
+	private final JLabel m_legacyPrefixesLabel = new JLabel(I18n.tr("load.legacy.prefixes"));
 	private final JTextField m_legacyPrefixesField = new JTextField();
 
 	private final JTextArea m_checkFileText = new JTextArea();
 
-	private final JButton m_browseGeopButton = new JButton("Browse…");
-	private final JButton m_browseSqliteButton = new JButton("Browse…");
-	private final JButton m_browseLegacyRootButton = new JButton("Browse…");
+	private final JButton m_browseGeopButton = new JButton(I18n.tr("button.browse"));
+	private final JButton m_browseSqliteButton = new JButton(I18n.tr("button.browse"));
+	private final JButton m_browseLegacyRootButton = new JButton(I18n.tr("button.browse"));
 
-	private final JButton m_continueButton = new JButton("Continue");
+	private final JButton m_continueButton = new JButton(I18n.tr("button.continue"));
 	private final JPanel m_geopackageSection = new JPanel();
 	private final JPanel m_legacySection = new JPanel();
 
@@ -104,7 +104,7 @@ public class LoadFileView extends JPanel {
 		setGeopackageEnabled(true);
 		setLegacyEnabled(false);
 
-		setLogText("Select a GeoPackage and a SQLite file.");
+		setLogText(I18n.tr("load.log.selectGeopackage"));
 		setGeopackagePath(null);
 		setSqlitePath(null);
 		setLegacyRootPath(null);
@@ -158,12 +158,12 @@ public class LoadFileView extends JPanel {
 	}
 
 	public void setGeopackagePath(String path) {
-		m_geopPathField.setText(path == null ? "(not selected)" : path);
+		m_geopPathField.setText(path == null ? I18n.tr("placeholder.notSelected") : path);
 		m_geopPathField.setToolTipText(path);
 	}
 
 	public void setSqlitePath(String path) {
-		m_sqlitePathField.setText(path == null ? "(not selected)" : path);
+		m_sqlitePathField.setText(path == null ? I18n.tr("placeholder.notSelected") : path);
 		m_sqlitePathField.setToolTipText(path);
 	}
 
@@ -182,7 +182,7 @@ public class LoadFileView extends JPanel {
 	}
 
 	public void setLegacyRootPath(String path) {
-		m_legacyRootField.setText(path == null ? "(not selected)" : path);
+		m_legacyRootField.setText(path == null ? I18n.tr("placeholder.notSelected") : path);
 		m_legacyRootField.setToolTipText(path);
 	}
 
@@ -345,7 +345,7 @@ public class LoadFileView extends JPanel {
 		content.add(m_legacySection);
 		content.add(Box.createVerticalStrut(14));
 
-		JLabel logLabel = new JLabel("Checks / log");
+		JLabel logLabel = new JLabel(I18n.tr("load.log.title"));
 		logLabel.setFont(logLabel.getFont().deriveFont(Font.BOLD));
 		content.add(logLabel);
 		content.add(Box.createVerticalStrut(6));

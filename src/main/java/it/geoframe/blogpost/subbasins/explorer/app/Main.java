@@ -11,6 +11,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 
+import it.geoframe.blogpost.subbasins.explorer.ui.I18n;
 import it.geoframe.blogpost.subbasins.explorer.ui.MainFrame;
 import it.geoframe.blogpost.subbasins.explorer.ui.SplashScreen;
 
@@ -44,15 +45,15 @@ public final class Main {
 
 				@Override
 				protected Void doInBackground() throws Exception {
-					publish("Starting…");
-					publish("Loading UI resources…");
+					publish(I18n.tr("splash.status.starting"));
+					publish(I18n.tr("splash.status.loadingResources"));
 					splash.setProgress(40);
 					Thread.sleep(1500);
 					//maybe put some hints
-					publish("Initializing GeoTools…");
+					publish(I18n.tr("splash.status.initializingGeoTools"));
 					Thread.sleep(2000);
 					splash.setProgress(80);
-					publish("Ready.");
+					publish(I18n.tr("splash.status.ready"));
 					Thread.sleep(100);
 
 					return null;
