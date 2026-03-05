@@ -18,7 +18,7 @@ public final class MainFrame extends JFrame implements LoadFileController.Naviga
 	private final LoadFileView loadFileView = new LoadFileView();
 
 	public MainFrame(String version, Image appIcon) {
-		super("GEOframe Subbasins Explorer");
+		super(I18n.tr("app.title"));
 
 		setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 		setLayout(new BorderLayout());

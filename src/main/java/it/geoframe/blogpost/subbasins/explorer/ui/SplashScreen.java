@@ -24,9 +24,9 @@ public class SplashScreen extends JPanel {
 
 	public SplashScreen(String author, String license, String version) {
 		initializePanel();
-		setTitle("GEOframe Subbasins Explorer");
+		setTitle(I18n.tr("app.title"));
 		setVersion(version);
-		setStatus("Starting…");
+		setStatus(I18n.tr("splash.status.starting"));
 		setProgress(0);
 		setAuthor(author);
 		setLicense(license);
