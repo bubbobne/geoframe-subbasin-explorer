@@ -11,12 +11,14 @@ import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 
-import it.geoframe.blogpost.subbasins.explorer.ui.I18n;
-import it.geoframe.blogpost.subbasins.explorer.ui.MainFrame;
+import it.geoframe.blogpost.subbasins.explorer.i18n.Messanger;
+import it.geoframe.blogpost.subbasins.explorer.ui.BaseFrame;
 import it.geoframe.blogpost.subbasins.explorer.ui.SplashScreen;
 
 /**
  * This is the entry point for the rainfall-runoff viewer.
+ * 
+ * This class take car to load the splash-screan and plot some information. And finally start the actual main.
  * 
  * @author Daniele Andreis
  */
@@ -38,22 +40,21 @@ public final class Main {
 			splashWindow.setContentPane(splash);
 			splashWindow.pack();
 			splashWindow.setSize(new Dimension(840, 620));
-			splashWindow.setLocationRelativeTo(null);
 			splashWindow.setAlwaysOnTop(true);
 			splashWindow.setVisible(true);
 			new SwingWorker<Void, String>() {
 
 				@Override
 				protected Void doInBackground() throws Exception {
-					publish(I18n.tr("splash.status.starting"));
-					publish(I18n.tr("splash.status.loadingResources"));
+					publish(Messanger.tr("splash.status.starting"));
+					publish(Messanger.tr("splash.status.loadingResources"));
 					splash.setProgress(40);
 					Thread.sleep(1500);
 					//maybe put some hints
-					publish(I18n.tr("splash.status.initializingGeoTools"));
+					publish(Messanger.tr("splash.status.initializingGeoTools"));
 					Thread.sleep(2000);
 					splash.setProgress(80);
-					publish(I18n.tr("splash.status.ready"));
+					publish(Messanger.tr("splash.status.ready"));
 					Thread.sleep(100);
 
 					return null;
@@ -68,10 +69,9 @@ public final class Main {
 				protected void done() {
 					splash.setVisible(false);
 					splash.disposeWindowAncestor();
-
 					// Home temporanea
 					Image appIcon = loadIconOrNull("images/geoframe.png");
-					MainFrame frame = new MainFrame(version, appIcon);
+					BaseFrame frame = new BaseFrame(version, appIcon);
 					frame.setVisible(true);
 				}
 

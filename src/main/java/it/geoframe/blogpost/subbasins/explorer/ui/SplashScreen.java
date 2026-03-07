@@ -3,6 +3,8 @@ package it.geoframe.blogpost.subbasins.explorer.ui;
 import com.jgoodies.forms.layout.CellConstraints;
 import com.jgoodies.forms.layout.FormLayout;
 
+import it.geoframe.blogpost.subbasins.explorer.i18n.Messanger;
+
 import javax.swing.*;
 import java.awt.*;
 import java.util.Objects;
@@ -24,9 +26,9 @@ public class SplashScreen extends JPanel {
 
 	public SplashScreen(String author, String license, String version) {
 		initializePanel();
-		setTitle(I18n.tr("app.title"));
+		setTitle(Messanger.tr("app.title"));
 		setVersion(version);
-		setStatus(I18n.tr("splash.status.starting"));
+		setStatus(Messanger.tr("splash.status.starting"));
 		setProgress(0);
 		setAuthor(author);
 		setLicense(license);

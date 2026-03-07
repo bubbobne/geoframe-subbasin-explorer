@@ -1,4 +1,4 @@
-package it.geoframe.blogpost.subbasins.explorer.ui;
+package it.geoframe.blogpost.subbasins.explorer.ui.basinmap;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -83,7 +83,7 @@ import it.geoframe.blogpost.subbasins.explorer.plot.TimeseriesWindow;
  *
  * @author Daniele Andreis
  */
-public final class SubbasinExplorerPanel extends JPanel {
+public final class SubbasinMapPanel extends JPanel {
 	private static final Color STREAM_GAUGE_COLOR = new Color(235, 137, 52);
 	private static final Color DEFAULT_COLOR = new Color(201, 203, 208);
 	private static final Color LAKE_COLOR = new Color(76, 120, 168);
@@ -105,7 +105,8 @@ public final class SubbasinExplorerPanel extends JPanel {
 	private SimpleFeatureSource networkSource;
 	private JMapPane mapPane;
 
-	public SubbasinExplorerPanel(ProjectConfig config) {
+	public SubbasinMapPanel(ProjectConfig config) {
+		super(new BorderLayout());
 		this.config = config;
 		buildUi();
 		SwingUtilities.invokeLater(this::loadMapLayers);
