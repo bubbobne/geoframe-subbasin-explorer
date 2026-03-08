@@ -205,19 +205,6 @@ public final class ProjectValidator {
 		}
 	}
 
-	private static List<String> listTablesStartingWith(Connection c, String prefix, int limit) throws SQLException {
-		List<String> out = new ArrayList<>();
-		try (PreparedStatement ps = c.prepareStatement(
-				"SELECT name FROM sqlite_master WHERE type IN ('table','view') AND lower(name) LIKE lower(?) ORDER BY name LIMIT ?")) {
-			ps.setString(1, prefix + "%");
-			ps.setInt(2, limit);
-			try (ResultSet rs = ps.executeQuery()) {
-				while (rs.next())
-					out.add(rs.getString(1));
-			}
-		}
-		return out;
-	}
 
 	public static List<String> listSimulationDischargeTables(Path sqliteDbPath, String simulationPrefix, int limit)
 			throws SQLException {

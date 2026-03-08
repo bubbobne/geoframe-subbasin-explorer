@@ -611,50 +611,6 @@ public final class TimeseriesWindow {
 		}
 	}
 
-	private List<StatePoint> aggregateStatePoints(List<StatePoint> points, String aggregation) {
-		if (points.isEmpty()) {
-			return List.of();
-		}
-		Map<Long, StatePoint> aggregated = new LinkedHashMap<>();
-		for (StatePoint p : points) {
-			long keyTs = bucketStart(p.timestamp(), aggregation);
-			StatePoint current = aggregated.get(keyTs);
-			if (current == null) {
-				aggregated.put(keyTs, new StatePoint(keyTs, p.sweDelta(), p.aetDelta(), p.canopyDelta(),
-						p.rootzoneDelta(), p.runoffDelta(), p.groundDelta()));
-			} else {
-				aggregated.put(keyTs,
-						new StatePoint(keyTs, current.sweDelta() + p.sweDelta(), current.aetDelta() + p.aetDelta(),
-								current.canopyDelta() + p.canopyDelta(), current.rootzoneDelta() + p.rootzoneDelta(),
-								current.runoffDelta() + p.runoffDelta(), current.groundDelta() + p.groundDelta()));
-			}
-		}
-		return new ArrayList<>(aggregated.values());
-	}
-
-	private long bucketStart(long ts, String aggregation) {
-		Instant instant = Instant.ofEpochMilli(ts);
-		if ("1h".equalsIgnoreCase(aggregation)) {
-			return (ts / 3_600_000L) * 3_600_000L;
-		}
-		if ("12h".equalsIgnoreCase(aggregation)) {
-			return (ts / 43_200_000L) * 43_200_000L;
-		}
-		if ("24h".equalsIgnoreCase(aggregation)) {
-			return (ts / 86_400_000L) * 86_400_000L;
-		}
-		LocalDate date = instant.atZone(ZoneOffset.UTC).toLocalDate();
-		if ("settimana".equalsIgnoreCase(aggregation)) {
-			LocalDate monday = date.with(java.time.DayOfWeek.MONDAY);
-			return monday.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
-		}
-		if ("anno".equalsIgnoreCase(aggregation)) {
-			LocalDate firstYearDay = date.with(TemporalAdjusters.firstDayOfYear());
-			return firstYearDay.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
-		}
-		LocalDate firstMonthDay = date.with(TemporalAdjusters.firstDayOfMonth());
-		return firstMonthDay.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
-	}
 
 	private void addLineSeries(List<TimeseriesLoader.TimeValueRow> rows, String key, String label, Color color) {
 		TimeSeries series = new TimeSeries(label);
